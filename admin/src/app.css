@@ -1,0 +1,358 @@
+@import 'tailwindcss';
+
+/*
+ * PocketPress admin theme.
+ *
+ * Design tokens adapted from @payloadcms/ui v3.87.0 (MIT, © Payload CMS, Inc.).
+ * The elevation-based neutral scale, success/error/warning ramps, spacing base,
+ * border widths, radii and the body/mono font stacks below are mirrored from
+ * that package's dist/scss (colors.scss, app.scss, type.scss, vars.scss) so the
+ * admin reads like Payload's own panel. Light theme only. The commercial
+ * "Suisse Intl" face Payload ships is NOT bundled — we use Payload's exact
+ * system-font fallback stack instead.
+ */
+
+/* ------------------------------------------------------------------ *
+ * Payload raw tokens (from colors.scss / app.scss / vars.scss)
+ * ------------------------------------------------------------------ */
+:root {
+	/* Neutral base ramp (colors.scss --color-base-*) */
+	--color-base-0: rgb(255, 255, 255);
+	--color-base-50: rgb(245, 245, 245);
+	--color-base-100: rgb(235, 235, 235);
+	--color-base-150: rgb(221, 221, 221);
+	--color-base-200: rgb(208, 208, 208);
+	--color-base-250: rgb(195, 195, 195);
+	--color-base-300: rgb(181, 181, 181);
+	--color-base-350: rgb(168, 168, 168);
+	--color-base-400: rgb(154, 154, 154);
+	--color-base-450: rgb(141, 141, 141);
+	--color-base-500: rgb(128, 128, 128);
+	--color-base-550: rgb(114, 114, 114);
+	--color-base-600: rgb(101, 101, 101);
+	--color-base-650: rgb(87, 87, 87);
+	--color-base-700: rgb(74, 74, 74);
+	--color-base-750: rgb(60, 60, 60);
+	--color-base-800: rgb(47, 47, 47);
+	--color-base-850: rgb(34, 34, 34);
+	--color-base-900: rgb(20, 20, 20);
+	--color-base-950: rgb(7, 7, 7);
+	--color-base-1000: rgb(0, 0, 0);
+
+	/* Success / info ramp (colors.scss --color-success-*) */
+	--color-success-50: rgb(237, 245, 249);
+	--color-success-100: rgb(218, 237, 248);
+	--color-success-150: rgb(188, 225, 248);
+	--color-success-200: rgb(156, 216, 253);
+	--color-success-250: rgb(125, 204, 248);
+	--color-success-400: rgb(36, 164, 223);
+	--color-success-500: rgb(21, 135, 186);
+	--color-success-700: rgb(17, 88, 121);
+	--color-success-800: rgb(18, 66, 90);
+	--color-success-900: rgb(19, 44, 58);
+
+	/* Error ramp (colors.scss --color-error-*) */
+	--color-error-50: rgb(250, 241, 240);
+	--color-error-100: rgb(252, 229, 227);
+	--color-error-150: rgb(247, 208, 204);
+	--color-error-200: rgb(254, 193, 188);
+	--color-error-300: rgb(253, 154, 146);
+	--color-error-500: rgb(218, 75, 72);
+	--color-error-600: rgb(182, 54, 54);
+	--color-error-800: rgb(105, 39, 37);
+
+	/* Warning ramp (colors.scss --color-warning-*) */
+	--color-warning-50: rgb(249, 242, 237);
+	--color-warning-100: rgb(248, 232, 219);
+	--color-warning-150: rgb(243, 212, 186);
+	--color-warning-200: rgb(243, 200, 162);
+	--color-warning-300: rgb(238, 166, 98);
+	--color-warning-500: rgb(185, 108, 13);
+	--color-warning-700: rgb(120, 70, 13);
+	--color-warning-800: rgb(90, 55, 19);
+	--color-warning-900: rgb(56, 38, 20);
+
+	/* Elevation aliases — light theme maps 1:1 to the base ramp (colors.scss) */
+	--theme-elevation-0: var(--color-base-0);
+	--theme-elevation-50: var(--color-base-50);
+	--theme-elevation-100: var(--color-base-100);
+	--theme-elevation-150: var(--color-base-150);
+	--theme-elevation-200: var(--color-base-200);
+	--theme-elevation-250: var(--color-base-250);
+	--theme-elevation-300: var(--color-base-300);
+	--theme-elevation-350: var(--color-base-350);
+	--theme-elevation-400: var(--color-base-400);
+	--theme-elevation-450: var(--color-base-450);
+	--theme-elevation-500: var(--color-base-500);
+	--theme-elevation-550: var(--color-base-550);
+	--theme-elevation-600: var(--color-base-600);
+	--theme-elevation-650: var(--color-base-650);
+	--theme-elevation-700: var(--color-base-700);
+	--theme-elevation-750: var(--color-base-750);
+	--theme-elevation-800: var(--color-base-800);
+	--theme-elevation-850: var(--color-base-850);
+	--theme-elevation-900: var(--color-base-900);
+	--theme-elevation-950: var(--color-base-950);
+	--theme-elevation-1000: var(--color-base-1000);
+
+	--theme-success-150: var(--color-success-150);
+	--theme-success-500: var(--color-success-500);
+	--theme-success-800: var(--color-success-800);
+	--theme-error-50: var(--color-error-50);
+	--theme-error-150: var(--color-error-150);
+	--theme-error-200: var(--color-error-200);
+	--theme-error-500: var(--color-error-500);
+	--theme-error-600: var(--color-error-600);
+	--theme-error-800: var(--color-error-800);
+	--theme-warning-150: var(--color-warning-150);
+	--theme-warning-800: var(--color-warning-800);
+
+	/* Semantic surfaces (app.scss) */
+	--theme-bg: var(--theme-elevation-0);
+	--theme-input-bg: var(--theme-elevation-0);
+	--theme-text: var(--theme-elevation-800);
+	--theme-border-color: var(--theme-elevation-150);
+	--theme-overlay: rgba(5, 5, 5, 0.5);
+
+	/* Metrics (app.scss / vars.scss) */
+	--base-body-size: 13px;
+	--nav-width: 275px;
+	--app-header-height: 3.5rem;
+	--style-radius-s: 3px;
+	--style-radius-m: 4px;
+	--style-radius-l: 8px;
+	--style-stroke-width: 1px;
+
+	/* Font stacks (app.scss --font-body / --font-mono; Suisse Intl fallback) */
+	--font-body:
+		-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--font-mono: 'SF Mono', Menlo, Consolas, Monaco, monospace;
+
+	/* ---- shadcn-svelte token bridge, remapped onto Payload tokens ---- */
+	--radius: 4px;
+
+	--background: var(--theme-elevation-0);
+	--foreground: var(--theme-elevation-800);
+
+	--card: var(--theme-elevation-0);
+	--card-foreground: var(--theme-elevation-800);
+
+	--popover: var(--theme-elevation-0);
+	--popover-foreground: var(--theme-elevation-800);
+
+	/* Payload primary action = dark elevation button */
+	--primary: var(--theme-elevation-800);
+	--primary-foreground: var(--theme-elevation-0);
+
+	--secondary: var(--theme-elevation-100);
+	--secondary-foreground: var(--theme-elevation-800);
+
+	--muted: var(--theme-elevation-50);
+	--muted-foreground: var(--theme-elevation-500);
+
+	--accent: var(--theme-elevation-50);
+	--accent-foreground: var(--theme-elevation-800);
+
+	--destructive: var(--theme-error-500);
+	--destructive-foreground: var(--theme-elevation-0);
+
+	--border: var(--theme-elevation-150);
+	--input: var(--theme-elevation-150);
+	--ring: var(--theme-elevation-400);
+}
+
+@theme inline {
+	--font-sans: var(--font-body);
+	--font-mono: var(--font-mono);
+
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+
+	/* Radius scale — Payload is near-square (3–8px) */
+	--radius-sm: var(--style-radius-s);
+	--radius-md: var(--style-radius-m);
+	--radius-lg: var(--style-radius-m);
+	--radius-xl: var(--style-radius-l);
+
+	/*
+	 * Re-point Tailwind's built-in palettes onto Payload's ramps. The existing
+	 * pages/components lean on stone/teal/amber/red/gray utilities; remapping the
+	 * scales here Payload-izes every one of them without touching that markup.
+	 * stone/gray -> neutral elevation, teal -> success/info, amber -> warning,
+	 * red -> error.
+	 */
+	--color-stone-50: var(--theme-elevation-50);
+	--color-stone-100: var(--theme-elevation-100);
+	--color-stone-200: var(--theme-elevation-150);
+	--color-stone-300: var(--theme-elevation-250);
+	--color-stone-400: var(--theme-elevation-400);
+	--color-stone-500: var(--theme-elevation-500);
+	--color-stone-600: var(--theme-elevation-650);
+	--color-stone-700: var(--theme-elevation-700);
+	--color-stone-800: var(--theme-elevation-750);
+	--color-stone-900: var(--theme-elevation-800);
+
+	--color-gray-100: var(--theme-elevation-100);
+	--color-gray-300: var(--theme-elevation-250);
+	--color-gray-600: var(--theme-elevation-650);
+
+	--color-teal-50: var(--color-success-50);
+	--color-teal-100: var(--color-success-100);
+	--color-teal-200: var(--color-success-150);
+	--color-teal-300: var(--color-success-200);
+	--color-teal-400: var(--color-success-400);
+	--color-teal-500: var(--color-success-500);
+	--color-teal-700: var(--color-success-700);
+	--color-teal-800: var(--color-success-800);
+	--color-teal-900: var(--color-success-900);
+
+	--color-amber-50: var(--color-warning-50);
+	--color-amber-100: var(--color-warning-100);
+	--color-amber-300: var(--color-warning-200);
+	--color-amber-700: var(--color-warning-700);
+	--color-amber-800: var(--color-warning-800);
+	--color-amber-900: var(--color-warning-900);
+
+	--color-red-100: var(--color-error-100);
+	--color-red-300: var(--color-error-200);
+	--color-red-800: var(--color-error-800);
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+
+	html {
+		color-scheme: light;
+	}
+
+	body {
+		@apply bg-background text-foreground;
+		font-family: var(--font-body);
+		-webkit-font-smoothing: antialiased;
+	}
+}
+
+/*
+ * Lexical editor content (PostEditor). These classes come from the editor
+ * theme in LexicalEditor.svelte and style only the live writing surface — the
+ * server strips all classes from saved HTML, so nothing here affects published
+ * output. Kept plain (not @apply) so the rules survive in the contenteditable
+ * regardless of Svelte scoping.
+ */
+.pp-editor-content .pp-h1 {
+	font-size: 1.5rem;
+	font-weight: 700;
+	line-height: 1.25;
+	margin: 1rem 0 0.5rem;
+}
+.pp-editor-content .pp-h2 {
+	font-size: 1.25rem;
+	font-weight: 700;
+	line-height: 1.3;
+	margin: 0.9rem 0 0.5rem;
+}
+.pp-editor-content .pp-h3 {
+	font-size: 1.1rem;
+	font-weight: 600;
+	margin: 0.8rem 0 0.4rem;
+}
+.pp-editor-content .pp-p {
+	margin: 0.5rem 0;
+}
+.pp-editor-content .pp-quote {
+	border-left: 3px solid var(--theme-elevation-300);
+	padding-left: 0.9rem;
+	color: var(--theme-elevation-500);
+	font-style: italic;
+	margin: 0.75rem 0;
+}
+.pp-editor-content .pp-ul {
+	list-style: disc;
+	padding-left: 1.5rem;
+	margin: 0.5rem 0;
+}
+.pp-editor-content .pp-ol {
+	list-style: decimal;
+	padding-left: 1.5rem;
+	margin: 0.5rem 0;
+}
+.pp-editor-content .pp-li {
+	margin: 0.15rem 0;
+}
+.pp-editor-content .pp-link {
+	color: var(--theme-success-500);
+	text-decoration: underline;
+}
+.pp-editor-content .pp-code-block {
+	display: block;
+	background: var(--theme-elevation-50);
+	border-radius: var(--style-radius-s);
+	padding: 0.75rem 1rem;
+	font-family: var(--font-mono);
+	font-size: 0.85em;
+	white-space: pre-wrap;
+	margin: 0.75rem 0;
+}
+.pp-editor-content .pp-inline-code {
+	background: var(--theme-elevation-50);
+	border-radius: var(--style-radius-s);
+	padding: 0.1rem 0.3rem;
+	font-family: var(--font-mono);
+	font-size: 0.85em;
+}
+.pp-editor-content .pp-sub {
+	vertical-align: sub;
+	font-size: 0.8em;
+}
+.pp-editor-content .pp-sup {
+	vertical-align: super;
+	font-size: 0.8em;
+}
+.pp-editor-content .pp-bold {
+	font-weight: 700;
+}
+.pp-editor-content .pp-italic {
+	font-style: italic;
+}
+.pp-editor-content .pp-underline {
+	text-decoration: underline;
+}
+.pp-editor-content .pp-strikethrough {
+	text-decoration: line-through;
+}
+.pp-editor-content .pp-underline.pp-strikethrough {
+	text-decoration: underline line-through;
+}
+.pp-editor-content .pp-editor-image img {
+	max-width: 100%;
+	height: auto;
+	border-radius: var(--style-radius-s);
+	margin: 0.5rem 0;
+}

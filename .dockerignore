@@ -1,0 +1,35 @@
+# Keep the build context small and reproducible: dependencies and build
+# outputs are regenerated inside the image, never copied from the host.
+
+.git
+.github
+
+# Node dependencies and admin build output (rebuilt in the admin-builder stage)
+admin/node_modules
+admin/dist
+
+# Compiled Go binary and build dirs
+pocketpress
+/bin/
+/dist/
+
+# Runtime data
+pp_data/
+*.db
+*.db-shm
+*.db-wal
+
+# Environment and local files
+.env
+.env.*
+!.env.example
+
+# Editor / OS cruft
+.idea/
+.vscode/
+**/.DS_Store
+Thumbs.db
+
+# Docs and meta not needed in the image
+*.md
+LICENSE

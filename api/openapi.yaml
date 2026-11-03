@@ -1,0 +1,709 @@
+openapi: 3.1.0
+info:
+  title: PocketPress Public API
+  version: "1"
+  summary: >-
+    PocketPress's public, unauthenticated, versioned content API. Read-only:
+    posts, categories and tags. Only ever returns published content — see
+    the visibility rule documented on GET /api/v1/posts/{slug}.
+  description: >-
+    All `/api/v1/*` responses are `Content-Type: application/json` with an
+    `X-Content-Type-Options: nosniff` header. Errors use a single envelope
+    (see the `Error` schema) with a machine-readable `code`.
+
+
+    ## Availability
+
+
+    Every `/api/v1/*` route is disabled (returns `404 api_disabled`) when
+    the instance's `public_api_enabled` setting is false, or before the
+    instance has completed first-run setup.
+
+
+    ## Caching
+
+
+    List endpoints (`GET /api/v1/posts`, the category/tag-scoped post
+    lists, and the categories/tags list and detail endpoints) send
+    `Cache-Control: public, max-age=60`. The post detail endpoint
+    (`GET /api/v1/posts/{slug}`) instead sends
+    `Cache-Control: public, max-age=0, must-revalidate` plus a strong `ETag`
+    (a SHA-256 hash of the post's id and `updated_at`) and honors
+    `If-None-Match`, returning `304 Not Modified` with an empty body when
+    the post is unchanged.
+
+
+    ## CORS
+
+
+    `/api/v1/*` and `/api/files/*` allow cross-origin `GET`/`HEAD` requests
+    from an explicit allowlist — the union of the server's static
+    `PP_CORS_ORIGINS` configuration and the instance's `cors_origins`
+    setting. A request whose `Origin` header exactly matches an allowed
+    origin gets `Access-Control-Allow-Origin: <origin>`,
+    `Vary: Origin` and `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`.
+    A non-matching (or missing) `Origin` gets no CORS headers at all — the
+    request is still served, just not readable cross-origin by a browser.
+    `Access-Control-Allow-Credentials` is never sent: this API is
+    cookie-free. An `OPTIONS` preflight request to any in-scope path
+    returns a bare `204 No Content`.
+
+
+    ## File URLs
+
+
+    `cover_image.url` and `seo.og_image_url` are **relative** paths of the
+    form `/api/files/{id}/{filename}` — resolve them against the
+    PocketPress instance's own origin (e.g. `PP_PUBLIC_URL`), not against
+    the API consumer's own origin.
+servers:
+  - url: /
+    description: Same-origin (relative to the PocketPress instance's own base URL).
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      summary: Liveness probe
+      description: Fixed payload; not versioned under /api/v1 and never gated by public_api_enabled.
+      tags: [Health]
+      responses:
+        "200":
+          description: The server is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  version:
+                    type: string
+                    example: "0.1.0"
+
+  /api/v1/posts:
+    get:
+      operationId: listPosts
+      summary: List published posts
+      description: >-
+        Returns one page of publicly-visible posts (see the visibility rule
+        on GET /api/v1/posts/{slug}), newest published first by default.
+      tags: [Posts]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/CategoryFilter"
+        - $ref: "#/components/parameters/TagFilter"
+        - $ref: "#/components/parameters/FeaturedFilter"
+        - $ref: "#/components/parameters/AuthorFilter"
+        - $ref: "#/components/parameters/SortFilter"
+      responses:
+        "200":
+          $ref: "#/components/responses/PostList"
+        "404":
+          $ref: "#/components/responses/ApiDisabled"
+
+  /api/v1/posts/{slug}:
+    get:
+      operationId: getPostBySlug
+      summary: Get a published post by slug
+      description: >-
+        Returns 404 `post_not_found` for a slug that doesn't exist, a draft,
+        an archived post, or a scheduled post not yet published — the hard
+        visibility rule: a post is only ever visible when `status` is
+        `published` **and** `published_at` is set **and** `published_at` is
+        not in the future. This holds even if a post's `published_at`
+        happens to be in the past while its status is still `scheduled`
+        (not yet transitioned to `published`).
+      tags: [Posts]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - name: If-None-Match
+          in: header
+          required: false
+          description: A previously-returned ETag. When it still matches, the server returns 304 with an empty body.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The post.
+          headers:
+            ETag:
+              description: Quoted SHA-256 hash of the post's id and updated_at.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=0, must-revalidate"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Post"
+        "304":
+          description: The post is unchanged since the ETag in If-None-Match. Empty body.
+          headers:
+            ETag:
+              schema:
+                type: string
+        "404":
+          description: No such post, or it is not currently publicly visible.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                post_not_found:
+                  value:
+                    error:
+                      code: post_not_found
+                      message: The requested post was not found.
+                      details: null
+                api_disabled:
+                  $ref: "#/components/examples/ApiDisabledError"
+
+  /api/v1/preview/posts/{slug}:
+    get:
+      operationId: previewPostBySlug
+      summary: Preview a post by slug with a signed token
+      description: >-
+        Returns a single post by slug **regardless of its status** (draft,
+        scheduled, archived or published) to a caller holding a valid,
+        post-scoped preview token — the authorized draft-preview flow. Mint a
+        token from the admin API's `POST /api/admin/v1/posts/{id}/preview-token`
+        (tokens are HMAC-signed, bound to one post, and expire after 15
+        minutes).
+
+
+        Unlike every other `/api/v1/*` route, this endpoint is **not** gated
+        by `public_api_enabled`: it is an authorized flow and keeps serving
+        previews even when the public content API is switched off.
+
+
+        The response body is the same `Post` shape as GET
+        /api/v1/posts/{slug}, except `published_at` is `null` for a post that
+        has never been published. Responses are never cached
+        (`Cache-Control: no-store`).
+      tags: [Posts]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - name: token
+          in: query
+          required: true
+          description: A signed, short-lived preview token bound to this post, from the admin preview-token endpoint.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The post, at any status.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "no-store"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Post"
+        "401":
+          description: The preview token is missing, invalid, expired, or bound to a different post.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: invalid_preview_token
+                  message: The preview token is missing, invalid or expired.
+                  details: null
+        "404":
+          description: No post has this slug (the token was otherwise valid).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              example:
+                error:
+                  code: post_not_found
+                  message: The requested post was not found.
+                  details: null
+
+  /api/v1/categories:
+    get:
+      operationId: listCategories
+      summary: List all categories
+      tags: [Categories]
+      responses:
+        "200":
+          description: Every category.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=60"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+        "404":
+          $ref: "#/components/responses/ApiDisabled"
+
+  /api/v1/categories/{slug}:
+    get:
+      operationId: getCategoryBySlug
+      summary: Get a category by slug
+      tags: [Categories]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: The category.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Category"
+        "404":
+          description: No such category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                category_not_found:
+                  value:
+                    error:
+                      code: category_not_found
+                      message: The requested category was not found.
+                      details: null
+                api_disabled:
+                  $ref: "#/components/examples/ApiDisabledError"
+
+  /api/v1/categories/{slug}/posts:
+    get:
+      operationId: listCategoryPosts
+      summary: List published posts in a category
+      description: >-
+        Same filtered/sorted/paginated shape as GET /api/v1/posts, scoped to
+        this category. Any `category` query parameter is ignored — the path
+        slug is authoritative.
+      tags: [Categories, Posts]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/TagFilter"
+        - $ref: "#/components/parameters/FeaturedFilter"
+        - $ref: "#/components/parameters/AuthorFilter"
+        - $ref: "#/components/parameters/SortFilter"
+      responses:
+        "200":
+          $ref: "#/components/responses/PostList"
+        "404":
+          description: No such category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                category_not_found:
+                  value:
+                    error:
+                      code: category_not_found
+                      message: The requested category was not found.
+                      details: null
+                api_disabled:
+                  $ref: "#/components/examples/ApiDisabledError"
+
+  /api/v1/tags:
+    get:
+      operationId: listTags
+      summary: List all tags
+      tags: [Tags]
+      responses:
+        "200":
+          description: Every tag.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=60"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Tag"
+        "404":
+          $ref: "#/components/responses/ApiDisabled"
+
+  /api/v1/tags/{slug}:
+    get:
+      operationId: getTagBySlug
+      summary: Get a tag by slug
+      tags: [Tags]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: The tag.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Tag"
+        "404":
+          description: No such tag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                tag_not_found:
+                  value:
+                    error:
+                      code: tag_not_found
+                      message: The requested tag was not found.
+                      details: null
+                api_disabled:
+                  $ref: "#/components/examples/ApiDisabledError"
+
+  /api/v1/tags/{slug}/posts:
+    get:
+      operationId: listTagPosts
+      summary: List published posts with a tag
+      description: >-
+        Same filtered/sorted/paginated shape as GET /api/v1/posts, scoped to
+        this tag. Any `tag` query parameter is ignored — the path slug is
+        authoritative.
+      tags: [Tags, Posts]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/CategoryFilter"
+        - $ref: "#/components/parameters/FeaturedFilter"
+        - $ref: "#/components/parameters/AuthorFilter"
+        - $ref: "#/components/parameters/SortFilter"
+      responses:
+        "200":
+          $ref: "#/components/responses/PostList"
+        "404":
+          description: No such tag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                tag_not_found:
+                  value:
+                    error:
+                      code: tag_not_found
+                      message: The requested tag was not found.
+                      details: null
+                api_disabled:
+                  $ref: "#/components/examples/ApiDisabledError"
+
+components:
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 1-based page number. Defaults to 1; invalid/non-positive values fall back to 1.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      required: false
+      description: Page size. Defaults to 20; capped at 100 (larger values are silently clamped).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    CategoryFilter:
+      name: category
+      in: query
+      required: false
+      description: >-
+        Restrict to posts in the category with this slug. An unknown slug
+        yields an empty page (not a 404 — a filter naming nothing simply
+        matches nothing).
+      schema:
+        type: string
+    TagFilter:
+      name: tag
+      in: query
+      required: false
+      description: >-
+        Restrict to posts tagged with this slug. An unknown slug yields an
+        empty page (not a 404).
+      schema:
+        type: string
+    FeaturedFilter:
+      name: featured
+      in: query
+      required: false
+      description: Restrict to featured (`true`) or non-featured (`false`) posts. Any other value is ignored (no filter applied).
+      schema:
+        type: boolean
+    AuthorFilter:
+      name: author
+      in: query
+      required: false
+      description: Restrict to posts by this author's user id.
+      schema:
+        type: string
+    SortFilter:
+      name: sort
+      in: query
+      required: false
+      description: Sort order. Defaults to `-published_at` (newest first) for any missing/unrecognized value.
+      schema:
+        type: string
+        enum: [published_at, -published_at, title, -title]
+        default: -published_at
+
+  responses:
+    PostList:
+      description: A page of posts.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: "public, max-age=60"
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data, meta]
+            properties:
+              data:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Post"
+              meta:
+                $ref: "#/components/schemas/Meta"
+    ApiDisabled:
+      description: The public API is disabled on this instance.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          example:
+            error:
+              code: api_disabled
+              message: The public API is disabled.
+              details: null
+
+  examples:
+    ApiDisabledError:
+      value:
+        error:
+          code: api_disabled
+          message: The public API is disabled.
+          details: null
+
+  schemas:
+    Meta:
+      type: object
+      required: [page, per_page, total_items, total_pages]
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total_items:
+          type: integer
+        total_pages:
+          type: integer
+
+    Author:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    Term:
+      type: object
+      description: A category or tag reference embedded in a post.
+      required: [id, name, slug]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+
+    CoverImage:
+      type: object
+      required: [url, width, height, alt]
+      properties:
+        url:
+          type: string
+          description: Relative path, e.g. "/api/files/{id}/{filename}". Resolve against the PocketPress instance's own origin.
+        width:
+          type: [integer, "null"]
+        height:
+          type: [integer, "null"]
+        alt:
+          type: string
+
+    Seo:
+      type: object
+      required: [title, description, canonical_url, og_image_url]
+      properties:
+        title:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+        canonical_url:
+          type: [string, "null"]
+        og_image_url:
+          type: [string, "null"]
+          description: Relative file URL of the post's Open Graph image, or null.
+
+    Post:
+      type: object
+      description: >-
+        Never carries admin-only/internal fields: no status, content_json,
+        content_text, scheduled_for, timestamps other than published_at and
+        updated_at, or author email/role.
+      required:
+        - id
+        - title
+        - slug
+        - excerpt
+        - content_html
+        - cover_image
+        - author
+        - categories
+        - tags
+        - featured
+        - seo
+        - published_at
+        - updated_at
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type: string
+        content_html:
+          type: string
+          description: Server-sanitized HTML.
+        cover_image:
+          oneOf:
+            - $ref: "#/components/schemas/CoverImage"
+            - type: "null"
+        author:
+          $ref: "#/components/schemas/Author"
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Term"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Term"
+        featured:
+          type: boolean
+        seo:
+          $ref: "#/components/schemas/Seo"
+        published_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Category:
+      type: object
+      required: [id, name, slug, description]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+
+    Tag:
+      type: object
+      required: [id, name, slug]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+
+    Error:
+      type: object
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          nullable: true
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/Error"
+
+tags:
+  - name: Health
+  - name: Posts
+  - name: Categories
+  - name: Tags

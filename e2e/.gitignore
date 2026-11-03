@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Playwright output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Our own scratch data: fresh temp data dirs (SQLite + uploads) created per
+# run by support/global-setup.ts, and any generated fixtures.
+.tmp/

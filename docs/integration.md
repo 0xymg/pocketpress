@@ -1,0 +1,207 @@
+# Connecting your frontend to PocketPress
+
+PocketPress exposes all published content via a stable `/api/v1` REST API. This guide shows how to fetch and display PocketPress posts from your frontend.
+
+## Fetching posts
+
+### Next.js (App Router)
+
+```typescript
+// app/blog/page.tsx
+import { notFound } from "next/navigation";
+
+const CMS_URL = process.env.NEXT_PUBLIC_CMS_URL || "http://localhost:8090";
+
+async function getPosts() {
+  const res = await fetch(`${CMS_URL}/api/v1/posts`, {
+    next: { revalidate: 60 }, // Revalidate every 60 seconds
+  });
+  if (!res.ok) throw new Error("Failed to fetch posts");
+  return res.json();
+}
+
+async function getPost(slug: string) {
+  const res = await fetch(`${CMS_URL}/api/v1/posts/${slug}`, {
+    next: { revalidate: 60 },
+  });
+  if (!res.ok) throw new Error("Post not found");
+  return res.json();
+}
+
+export default async function Blog() {
+  const { data: posts } = await getPosts();
+  return (
+    <ul>
+      {posts.map((post: any) => (
+        <li key={post.id}>
+          <a href={`/blog/${post.slug}`}>{post.title}</a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### Astro
+
+```astro
+---
+// src/pages/blog/index.astro
+const CMS_URL = import.meta.env.PUBLIC_CMS_URL || "http://localhost:8090";
+const res = await fetch(`${CMS_URL}/api/v1/posts`);
+const { data: posts } = await res.json();
+---
+
+<ul>
+  {posts.map((post: any) => (
+    <li>
+      <a href={`/blog/${post.slug}`}>{post.title}</a>
+    </li>
+  ))}
+</ul>
+```
+
+### SvelteKit
+
+```typescript
+// src/routes/blog/+page.server.ts
+import type { PageServerLoad } from "./$types";
+
+export const load: PageServerLoad = async ({ fetch }) => {
+  const res = await fetch(`http://localhost:8090/api/v1/posts`);
+  const { data: posts } = await res.json();
+  return { posts };
+};
+```
+
+## CORS setup
+
+Cross-origin requests require explicit allowlist configuration. In the PocketPress admin, go to **Settings → General** and add your frontend URL to **CORS Origins**, or set `PP_CORS_ORIGINS` at startup:
+
+```bash
+docker run -e PP_CORS_ORIGINS=https://example.com,https://www.example.com \
+  -p 8090:8090 -v pocketpress_data:/app/data pocketpress/pocketpress
+```
+
+## Previewing drafts
+
+Generate a preview token from the admin UI, or use the admin API:
+
+```bash
+curl -X POST http://localhost:8090/api/admin/v1/posts/{post_id}/preview-token \
+  -H "Authorization: Bearer <session_token>" \
+  -H "Content-Type: application/json"
+```
+
+Response:
+
+```json
+{
+  "token": "...",
+  "expires_at": "2026-08-02T12:15:00Z",
+  "preview_url": "https://cms.example.com/api/v1/preview/posts/draft-post?token=..."
+}
+```
+
+Configure your frontend preview URL in **Settings → General**. Use a template like:
+
+```
+https://yoursite.com/preview?slug={slug}&token={token}
+```
+
+On your preview route, fetch the draft:
+
+```typescript
+// getServerSideProps or server-side (never in getStaticProps)
+const res = await fetch(
+  `https://cms.example.com/api/v1/preview/posts/${slug}?token=${token}`
+);
+if (!res.ok) return { notFound: true };
+const { data: post } = await res.json();
+```
+
+Responses include `Cache-Control: no-store` and are never cached.
+
+## Webhook-triggered rebuilds
+
+When a post publishes, PocketPress sends a webhook. Verify the signature in your deploy handler:
+
+```typescript
+// Node.js example
+import crypto from "crypto";
+
+export async function handleWebhook(req: any) {
+  const signature = req.headers["x-pocketpress-signature"];
+  const timestamp = req.headers["x-pocketpress-timestamp"];
+  const secret = process.env.POCKETPRESS_WEBHOOK_SECRET;
+
+  const body = req.rawBody; // Raw request body (string)
+  const computed = crypto
+    .createHmac("sha256", secret)
+    .update(timestamp + "." + body)
+    .digest("hex");
+
+  if (
+    !crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from("sha256=" + computed)
+    )
+  ) {
+    throw new Error("Invalid signature");
+  }
+
+  // Signature verified; trigger your rebuild
+  console.log("Rebuilding site...");
+}
+```
+
+Configure the webhook URL and secret in the admin UI (**Settings → Webhooks**). PocketPress retries failed deliveries automatically.
+
+## Response shape
+
+Every post includes these fields. See `api/openapi.yaml` for full details:
+
+```json
+{
+  "id": "post_id",
+  "title": "Post title",
+  "slug": "post-slug",
+  "excerpt": "Short summary",
+  "content_html": "<p>Sanitized HTML</p>",
+  "cover_image": {
+    "url": "/api/files/{id}/image.jpg",
+    "width": null,
+    "height": null,
+    "alt": "Alt text"
+  },
+  "author": {
+    "id": "user_id",
+    "name": "Author name"
+  },
+  "categories": [
+    {
+      "id": "cat_id",
+      "name": "Category",
+      "slug": "category"
+    }
+  ],
+  "tags": [
+    {
+      "id": "tag_id",
+      "name": "Tag",
+      "slug": "tag"
+    }
+  ],
+  "featured": false,
+  "seo": {
+    "title": "Custom SEO title",
+    "description": "Meta description",
+    "canonical_url": "https://example.com/path",
+    "og_image_url": "/api/files/{id}/og.jpg"
+  },
+  "published_at": "2026-08-02T12:00:00Z",
+  "updated_at": "2026-08-02T12:00:00Z"
+}
+```
+
+File URLs (`cover_image.url`, `seo.og_image_url`) are relative paths. Resolve them against the PocketPress instance URL (e.g., `PP_PUBLIC_URL`).

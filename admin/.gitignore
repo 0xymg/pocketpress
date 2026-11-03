@@ -1,0 +1,21 @@
+node_modules
+
+# SvelteKit build output. `dist` is what adapter-static writes and what
+# admin/embed.go embeds into the Go binary — the root .gitignore also
+# ignores admin/dist, this entry keeps the admin/ package self-contained.
+.svelte-kit
+dist
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*

@@ -1,0 +1,19 @@
+# PocketPress — local/self-hosted deployment.
+#
+#   docker compose up --build
+#
+# Serves the admin app and (in later phases) the API on http://localhost:8090.
+# Data lives in the named volume so it survives container recreation.
+
+services:
+  pocketpress:
+    build: .
+    image: pocketpress/pocketpress
+    ports:
+      - "8090:8090"
+    volumes:
+      - pocketpress_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  pocketpress_data:

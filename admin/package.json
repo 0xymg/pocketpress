@@ -1,0 +1,52 @@
+{
+	"name": "pocketpress-admin",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"lint": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+	},
+	"dependencies": {
+		"@lexical/code": "^0.40.0",
+		"@lexical/history": "^0.40.0",
+		"@lexical/html": "^0.40.0",
+		"@lexical/link": "^0.40.0",
+		"@lexical/list": "^0.40.0",
+		"@lexical/markdown": "0.40.0",
+		"@lexical/rich-text": "^0.40.0",
+		"@lexical/selection": "^0.40.0",
+		"@lexical/utils": "^0.40.0",
+		"bits-ui": "^2.18.1",
+		"clsx": "^2.1.1",
+		"lexical": "^0.40.0",
+		"tailwind-merge": "^3.6.0",
+		"tailwind-variants": "^3.3.0"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.70.2",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@tailwindcss/vite": "^4.3.3",
+		"@testing-library/jest-dom": "^7.0.0",
+		"@testing-library/svelte": "^5.4.2",
+		"@types/node": "^22.20.1",
+		"jsdom": "^30.0.1",
+		"svelte": "^5.56.8",
+		"svelte-check": "^4.7.4",
+		"tailwindcss": "^4.3.3",
+		"typescript": "^6.0.3",
+		"vite": "^8.2.0",
+		"vitest": "^4.1.10"
+	}
+}

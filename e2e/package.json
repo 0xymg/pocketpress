@@ -1,0 +1,14 @@
+{
+  "name": "pocketpress-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright end-to-end suite for PocketPress (plan section 14 golden path). Isolated package: own lockfile, never published, never imported by admin/ or the Go module.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.0"
+  }
+}

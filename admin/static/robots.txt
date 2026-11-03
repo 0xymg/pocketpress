@@ -1,0 +1,4 @@
+# This is the PocketPress admin panel — nothing here is meant for search
+# engines.
+User-agent: *
+Disallow: /

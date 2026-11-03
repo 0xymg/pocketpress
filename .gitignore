@@ -1,0 +1,40 @@
+# Go build artifacts
+/pocketpress
+/bin/
+/dist/
+
+# Data and databases
+pp_data/
+*.db
+*.db-shm
+*.db-wal
+
+# Admin application
+admin/node_modules/
+admin/dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# System
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage.out
+admin/coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+
+# Temporary
+/tmp
+*.tmp
