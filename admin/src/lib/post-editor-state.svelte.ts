@@ -17,6 +17,8 @@ export interface PostFormSnapshot {
 	seoTitle: string;
 	seoDescription: string;
 	canonicalUrl: string;
+	/** Pretty-printed JSON object text for the custom metadata editor. */
+	metadataText: string;
 	/** Media id of the current cover/OG image, or "" when unset — this (not the object) is what dirty tracking and payload building key on. */
 	coverImageId: string;
 	ogImageId: string;
@@ -43,11 +45,36 @@ function snapshotsEqual(a: PostFormSnapshot, b: PostFormSnapshot): boolean {
 		a.seoTitle === b.seoTitle &&
 		a.seoDescription === b.seoDescription &&
 		a.canonicalUrl === b.canonicalUrl &&
+		a.metadataText === b.metadataText &&
 		a.coverImageId === b.coverImageId &&
 		a.ogImageId === b.ogImageId &&
 		sameIds(a.categoryIds, b.categoryIds) &&
 		sameIds(a.tagIds, b.tagIds)
 	);
+}
+
+/** Serialize a metadata object for the editor textarea (stable empty = `{}`). */
+export function formatMetadataText(value: Record<string, unknown> | null | undefined): string {
+	if (!value || Object.keys(value).length === 0) return '{}';
+	try {
+		return JSON.stringify(value, null, 2);
+	} catch {
+		return '{}';
+	}
+}
+
+/** Parse editor metadata text into an object, or return an error message. */
+export function parseMetadataText(text: string): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
+	const trimmed = text.trim() === '' ? '{}' : text;
+	try {
+		const parsed = JSON.parse(trimmed) as unknown;
+		if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+			return { ok: false, error: 'Metadata must be a JSON object.' };
+		}
+		return { ok: true, value: parsed as Record<string, unknown> };
+	} catch {
+		return { ok: false, error: 'Metadata must be valid JSON.' };
+	}
 }
 
 /**
@@ -99,6 +126,8 @@ export class PostEditorState {
 	seoTitle = $state('');
 	seoDescription = $state('');
 	canonicalUrl = $state('');
+	/** Pretty-printed custom metadata JSON object text. */
+	metadataText = $state('{}');
 	/** Currently selected cover/OG image, or null when unset. Assigned directly by PostEditor.svelte after a MediaPicker pick, same as categoryIds/featured. */
 	coverImage = $state<PostMediaRef | null>(null);
 	ogImage = $state<PostMediaRef | null>(null);
@@ -126,6 +155,7 @@ export class PostEditorState {
 			seoTitle: this.seoTitle,
 			seoDescription: this.seoDescription,
 			canonicalUrl: this.canonicalUrl,
+			metadataText: this.metadataText,
 			coverImageId: this.coverImage?.id ?? '',
 			ogImageId: this.ogImage?.id ?? ''
 		};
@@ -203,6 +233,7 @@ export class PostEditorState {
 		this.seoTitle = '';
 		this.seoDescription = '';
 		this.canonicalUrl = '';
+		this.metadataText = '{}';
 		this.coverImage = null;
 		this.ogImage = null;
 		this.slugTouched = false;
@@ -245,6 +276,7 @@ export class PostEditorState {
 		this.seoTitle = post.seo_title;
 		this.seoDescription = post.seo_description;
 		this.canonicalUrl = post.canonical_url;
+		this.metadataText = formatMetadataText(post.metadata);
 		this.coverImage = post.cover_image;
 		this.ogImage = post.og_image;
 		this.slugTouched = true;
@@ -279,6 +311,10 @@ export class PostEditorState {
 			seo_title: this.seoTitle,
 			seo_description: this.seoDescription,
 			canonical_url: this.canonicalUrl,
+			metadata: (() => {
+				const parsed = parseMetadataText(this.metadataText);
+				return parsed.ok ? parsed.value : {};
+			})(),
 			// Always send the current value (id or "") rather than omitting when
 			// untouched — simpler than tracking a third "touched" state, and
 			// matches the PATCH contract (omitted = unchanged, "" = clear).

@@ -1,6 +1,7 @@
 package adminapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -97,6 +98,7 @@ type postFullDTO struct {
 	CanonicalURL     string              `json:"canonical_url"`
 	TranslationGroup *string             `json:"translation_group"`
 	Translations     []translationRefDTO `json:"translations"`
+	Metadata         json.RawMessage     `json:"metadata"`
 }
 
 func toPostSummaryDTO(p content.Post) postSummaryDTO {
@@ -149,7 +151,16 @@ func toPostFullDTO(p content.Post) postFullDTO {
 		CanonicalURL:     p.Row.CanonicalURL,
 		TranslationGroup: stringPtrOrNil(p.Row.TranslationGroup),
 		Translations:     translations,
+		Metadata:         metadataRaw(p.Row.Metadata),
 	}
+}
+
+// metadataRaw returns a JSON object for the metadata field (always at least {}).
+func metadataRaw(s string) json.RawMessage {
+	if s == "" {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(s)
 }
 
 func categoryRefs(cats []store.Category) []termRefDTO {
@@ -270,23 +281,24 @@ func parsePostSort(sort string) (store.PostSortField, bool) {
 // current user unless another author is given.
 func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Title          string   `json:"title"`
-		Slug           *string  `json:"slug"`
-		Excerpt        string   `json:"excerpt"`
-		ContentJSON    string   `json:"content_json"`
-		ContentHTML    string   `json:"content_html"`
-		CoverImage     string   `json:"cover_image"`
-		Status         string   `json:"status"`
-		Author         string   `json:"author"`
-		Categories     []string `json:"categories"`
-		Tags           []string `json:"tags"`
-		Featured       bool     `json:"featured"`
-		SEOTitle       string   `json:"seo_title"`
-		SEODescription string   `json:"seo_description"`
-		CanonicalURL   string   `json:"canonical_url"`
-		OGImage        string   `json:"og_image"`
-		Locale         string   `json:"locale"`
-		TranslateOf    string   `json:"translate_of"`
+		Title          string          `json:"title"`
+		Slug           *string         `json:"slug"`
+		Excerpt        string          `json:"excerpt"`
+		ContentJSON    string          `json:"content_json"`
+		ContentHTML    string          `json:"content_html"`
+		CoverImage     string          `json:"cover_image"`
+		Status         string          `json:"status"`
+		Author         string          `json:"author"`
+		Categories     []string        `json:"categories"`
+		Tags           []string        `json:"tags"`
+		Featured       bool            `json:"featured"`
+		SEOTitle       string          `json:"seo_title"`
+		SEODescription string          `json:"seo_description"`
+		CanonicalURL   string          `json:"canonical_url"`
+		OGImage        string          `json:"og_image"`
+		Locale         string          `json:"locale"`
+		TranslateOf    string          `json:"translate_of"`
+		Metadata       json.RawMessage `json:"metadata"`
 	}
 	if !h.decodePost(w, r, &req) {
 		return
@@ -311,6 +323,7 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 		OGImage:        req.OGImage,
 		Locale:         req.Locale,
 		TranslateOf:    req.TranslateOf,
+		Metadata:       string(req.Metadata),
 		CurrentUserID:  user.ID,
 	})
 	if err != nil {
@@ -334,26 +347,33 @@ func (h *Handler) getPost(w http.ResponseWriter, r *http.Request) {
 // logic).
 func (h *Handler) updatePost(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Title          *string   `json:"title"`
-		Slug           *string   `json:"slug"`
-		Excerpt        *string   `json:"excerpt"`
-		ContentJSON    *string   `json:"content_json"`
-		ContentHTML    *string   `json:"content_html"`
-		CoverImage     *string   `json:"cover_image"`
-		Status         *string   `json:"status"`
-		Author         *string   `json:"author"`
-		Categories     *[]string `json:"categories"`
-		Tags           *[]string `json:"tags"`
-		Featured       *bool     `json:"featured"`
-		SEOTitle       *string   `json:"seo_title"`
-		SEODescription *string   `json:"seo_description"`
-		CanonicalURL   *string   `json:"canonical_url"`
-		OGImage        *string   `json:"og_image"`
-		Locale         *string   `json:"locale"`
-		TranslateOf    *string   `json:"translate_of"`
+		Title          *string          `json:"title"`
+		Slug           *string          `json:"slug"`
+		Excerpt        *string          `json:"excerpt"`
+		ContentJSON    *string          `json:"content_json"`
+		ContentHTML    *string          `json:"content_html"`
+		CoverImage     *string          `json:"cover_image"`
+		Status         *string          `json:"status"`
+		Author         *string          `json:"author"`
+		Categories     *[]string        `json:"categories"`
+		Tags           *[]string        `json:"tags"`
+		Featured       *bool            `json:"featured"`
+		SEOTitle       *string          `json:"seo_title"`
+		SEODescription *string          `json:"seo_description"`
+		CanonicalURL   *string          `json:"canonical_url"`
+		OGImage        *string          `json:"og_image"`
+		Locale         *string          `json:"locale"`
+		TranslateOf    *string          `json:"translate_of"`
+		Metadata       *json.RawMessage `json:"metadata"`
 	}
 	if !h.decodePost(w, r, &req) {
 		return
+	}
+
+	var metadata *string
+	if req.Metadata != nil {
+		s := string(*req.Metadata)
+		metadata = &s
 	}
 
 	user, _ := middleware.UserFromContext(r.Context())
@@ -375,6 +395,7 @@ func (h *Handler) updatePost(w http.ResponseWriter, r *http.Request) {
 		OGImage:        req.OGImage,
 		Locale:         req.Locale,
 		TranslateOf:    req.TranslateOf,
+		Metadata:       metadata,
 		CurrentUserID:  user.ID,
 	})
 	if err != nil {

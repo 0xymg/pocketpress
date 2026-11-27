@@ -25,6 +25,7 @@ export interface DraftForm {
 	seoTitle: string;
 	seoDescription: string;
 	canonicalUrl: string;
+	metadataText: string;
 }
 
 /** A stored draft: the form plus the moment it was captured. */
@@ -58,6 +59,7 @@ export function draftFormsEqual(a: DraftForm, b: DraftForm): boolean {
 		a.seoTitle === b.seoTitle &&
 		a.seoDescription === b.seoDescription &&
 		a.canonicalUrl === b.canonicalUrl &&
+		a.metadataText === b.metadataText &&
 		sameIds(a.categoryIds, b.categoryIds) &&
 		sameIds(a.tagIds, b.tagIds)
 	);

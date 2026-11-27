@@ -62,8 +62,8 @@ Features that serve newsletters, commerce, community, memberships, or help build
 
 ## Current phase
 
-**v0.3 in progress** — Authors, localization, scheduling calendar, and draft review (`0007`) are ahead. **Content duplication templates** is the current slice (stacked on draft review): migration `0008_post_templates`, admin CRUD at `/api/admin/v1/templates`, `POST …/create-post` mints a draft, admin `/templates` plus Save as template / New from template. Skip custom metadata.
+**v0.3 in progress** — Authors, localization, scheduling calendar, draft review (`0007`), and duplication templates (`0008`) are ahead. **Per-post custom metadata object** is the current (final) v0.3 slice: migration `0009_post_metadata`, `posts.metadata` JSON object on admin + public APIs / SDK / OpenAPI, editor JSON field. No further plan §16 v0.3 items after this.
 
 **v0.2 complete** — all plan §16 items: RSS/Atom feeds, Sitemap, JS/TS SDK, Markdown/Ghost/WordPress import, FTS, image transforms, webhook filters, and API key management for private content APIs (`ppkey_…` Bearer keys; SHA-256 hashed at rest; scopes `content:read` / `preview:read`; admin `/settings/api-keys`; uses existing `api_keys` table from `0001_init`).
 
-v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02). Remaining v0.3 item (per-post custom metadata) is not started.
+v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02).

@@ -40,6 +40,7 @@ function form(overrides: Partial<DraftForm> = {}): DraftForm {
 		seoTitle: '',
 		seoDescription: '',
 		canonicalUrl: '',
+		metadataText: '{}',
 		...overrides
 	};
 }

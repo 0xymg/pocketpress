@@ -286,10 +286,16 @@ Every post includes these fields. See `api/openapi.yaml` for full details:
     "canonical_url": "https://example.com/path",
     "og_image_url": "/api/files/{id}/og.jpg"
   },
+  "metadata": {
+    "hero": "launch",
+    "priority": 1
+  },
   "published_at": "2026-08-02T12:00:00Z",
   "updated_at": "2026-08-02T12:00:00Z"
 }
 ```
+
+`metadata` is a free-form JSON object for product-specific fields (always present; defaults to `{}`). It does not replace the first-class `seo` object.
 
 File URLs (`cover_image.url`, `seo.og_image_url`) are relative paths. Resolve them against the PocketPress instance URL (e.g., `PP_PUBLIC_URL`).
 

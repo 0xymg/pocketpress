@@ -466,6 +466,11 @@ func (s *Service) CreatePost(ctx context.Context, in PostCreateInput) (Post, err
 		return Post{}, err
 	}
 
+	metadata, metaErr := NormalizeMetadata([]byte(in.Metadata))
+	if metaErr != "" {
+		fields.set("metadata", metaErr)
+	}
+
 	if err := fields.orNil(); err != nil {
 		return Post{}, err
 	}
@@ -502,6 +507,7 @@ func (s *Service) CreatePost(ctx context.Context, in PostCreateInput) (Post, err
 			OGImage:          ogImage,
 			Locale:           locale,
 			TranslationGroup: group,
+			Metadata:         metadata,
 		})
 		if err != nil {
 			return err
@@ -645,6 +651,16 @@ func (s *Service) UpdatePost(ctx context.Context, id string, in PostUpdateInput)
 		return Post{}, err
 	}
 
+	metadata := MetadataOrEmpty(existing.Metadata)
+	if in.Metadata != nil {
+		normalized, metaErr := NormalizeMetadata([]byte(*in.Metadata))
+		if metaErr != "" {
+			fields.set("metadata", metaErr)
+		} else {
+			metadata = normalized
+		}
+	}
+
 	if err := fields.orNil(); err != nil {
 		return Post{}, err
 	}
@@ -680,6 +696,7 @@ func (s *Service) UpdatePost(ctx context.Context, id string, in PostUpdateInput)
 			OGImage:          ogImage,
 			Locale:           locale,
 			TranslationGroup: group,
+			Metadata:         metadata,
 		}); err != nil {
 			return err
 		}
@@ -781,6 +798,7 @@ func (s *Service) DuplicatePost(ctx context.Context, id, currentUserID string) (
 			Locale:         src.Locale,
 			// Duplicate stands alone — do not inherit the source translation group.
 			TranslationGroup: "",
+			Metadata:         MetadataOrEmpty(src.Metadata),
 		})
 		if err != nil {
 			return err

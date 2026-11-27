@@ -44,6 +44,15 @@ func contentJSONOrDefault(s string) string {
 	return s
 }
 
+// metadataOrDefault normalizes a caller-supplied metadata JSON object: a
+// blank value becomes '{}' so the NOT NULL column always holds an object.
+func metadataOrDefault(s string) string {
+	if s == "" {
+		return emptyContentJSON
+	}
+	return s
+}
+
 // Post is a row of the posts table (scalar columns only; the related
 // categories, tags and author are loaded separately).
 type Post struct {
@@ -64,6 +73,7 @@ type Post struct {
 	OGImage              string
 	Locale               string // BCP 47 language tag (e.g. "en", "tr")
 	TranslationGroup     string // "" when the post stands alone
+	Metadata             string // JSON object; always "{}" or compact object JSON
 	ScheduledFor         *time.Time
 	PublishedAt          *time.Time
 	ReviewStatus         string // none | pending | approved | changes_requested
@@ -98,6 +108,7 @@ type NewPost struct {
 	OGImage          string
 	Locale           string
 	TranslationGroup string
+	Metadata         string // JSON object; blank → "{}"
 }
 
 // PostUpdate holds the resolved writable fields for UpdatePost, including
@@ -121,6 +132,7 @@ type PostUpdate struct {
 	OGImage          string
 	Locale           string
 	TranslationGroup string
+	Metadata         string // JSON object; blank → "{}"
 }
 
 // PostFilter is the set of list filters ListPosts and CountPosts share.
@@ -190,6 +202,7 @@ func CreatePost(ctx context.Context, db DBTX, in NewPost) (Post, error) {
 		OGImage:          in.OGImage,
 		Locale:           locale,
 		TranslationGroup: in.TranslationGroup,
+		Metadata:         metadataOrDefault(in.Metadata),
 		ReviewStatus:     ReviewStatusNone,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -199,12 +212,13 @@ func CreatePost(ctx context.Context, db DBTX, in NewPost) (Post, error) {
 		INSERT INTO posts (
 			id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, locale, translation_group, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			canonical_url, og_image, locale, translation_group, metadata,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.ID, p.Title, p.Slug, nullString(p.Excerpt), p.ContentJSON, p.ContentHTML, p.ContentText,
 		nullString(p.CoverImage), p.Status, p.Author, boolToInt(p.Featured), nullString(p.SEOTitle),
 		nullString(p.SEODescription), nullString(p.CanonicalURL), nullString(p.OGImage),
-		p.Locale, nullString(p.TranslationGroup),
+		p.Locale, nullString(p.TranslationGroup), p.Metadata,
 		formatTime(p.CreatedAt), formatTime(p.UpdatedAt),
 	)
 	if err != nil {
@@ -225,12 +239,12 @@ func UpdatePost(ctx context.Context, db DBTX, id string, in PostUpdate) error {
 		UPDATE posts SET
 			title = ?, slug = ?, excerpt = ?, content_json = ?, content_html = ?, content_text = ?,
 			cover_image = ?, status = ?, author = ?, featured = ?, seo_title = ?, seo_description = ?,
-			canonical_url = ?, og_image = ?, locale = ?, translation_group = ?, updated_at = ?
+			canonical_url = ?, og_image = ?, locale = ?, translation_group = ?, metadata = ?, updated_at = ?
 		WHERE id = ?`,
 		in.Title, in.Slug, nullString(in.Excerpt), contentJSONOrDefault(in.ContentJSON), in.ContentHTML, in.ContentText,
 		nullString(in.CoverImage), in.Status, in.Author, boolToInt(in.Featured), nullString(in.SEOTitle),
 		nullString(in.SEODescription), nullString(in.CanonicalURL), nullString(in.OGImage),
-		locale, nullString(in.TranslationGroup),
+		locale, nullString(in.TranslationGroup), metadataOrDefault(in.Metadata),
 		formatTime(time.Now().UTC()), id,
 	)
 	if err != nil {
@@ -295,7 +309,7 @@ func ListDuePosts(ctx context.Context, db DBTX, now time.Time) ([]Post, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, locale, translation_group,
+			canonical_url, og_image, locale, translation_group, metadata,
 			scheduled_for, published_at,
 			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
 			created_at, updated_at
@@ -340,7 +354,7 @@ func GetPostByID(ctx context.Context, db DBTX, id string) (Post, error) {
 	row := db.QueryRowContext(ctx, `
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, locale, translation_group,
+			canonical_url, og_image, locale, translation_group, metadata,
 			scheduled_for, published_at,
 			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
 			created_at, updated_at
@@ -356,7 +370,7 @@ func GetPostBySlug(ctx context.Context, db DBTX, slug string) (Post, error) {
 	row := db.QueryRowContext(ctx, `
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, locale, translation_group,
+			canonical_url, og_image, locale, translation_group, metadata,
 			scheduled_for, published_at,
 			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
 			created_at, updated_at
@@ -500,7 +514,7 @@ func postQueryParts(filter PostFilter) (from, where string, args []any, useFTS b
 func postSelectColumns(useFTS bool) string {
 	cols := `id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, locale, translation_group,
+			canonical_url, og_image, locale, translation_group, metadata,
 			scheduled_for, published_at,
 			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
 			created_at, updated_at`
@@ -509,7 +523,7 @@ func postSelectColumns(useFTS bool) string {
 	}
 	return `posts.id, posts.title, posts.slug, posts.excerpt, posts.content_json, posts.content_html, posts.content_text,
 			posts.cover_image, posts.status, posts.author, posts.featured, posts.seo_title, posts.seo_description,
-			posts.canonical_url, posts.og_image, posts.locale, posts.translation_group,
+			posts.canonical_url, posts.og_image, posts.locale, posts.translation_group, posts.metadata,
 			posts.scheduled_for, posts.published_at,
 			posts.review_status, posts.review_note, posts.reviewed_by, posts.reviewed_at, posts.submitted_for_review_at,
 			posts.created_at, posts.updated_at`
@@ -632,6 +646,7 @@ func scanPost(row rowScanner) (Post, error) {
 		canonicalURL         sql.NullString
 		ogImage              sql.NullString
 		translationGroup     sql.NullString
+		metadata             string
 		scheduledFor         sql.NullString
 		publishedAt          sql.NullString
 		reviewNote           sql.NullString
@@ -645,7 +660,7 @@ func scanPost(row rowScanner) (Post, error) {
 	err := row.Scan(
 		&p.ID, &p.Title, &p.Slug, &excerpt, &p.ContentJSON, &p.ContentHTML, &p.ContentText,
 		&coverImage, &p.Status, &p.Author, &featured, &seoTitle, &seoDesc,
-		&canonicalURL, &ogImage, &p.Locale, &translationGroup,
+		&canonicalURL, &ogImage, &p.Locale, &translationGroup, &metadata,
 		&scheduledFor, &publishedAt,
 		&p.ReviewStatus, &reviewNote, &reviewedBy, &reviewedAt, &submittedForReviewAt,
 		&createdAt, &updatedAt,
@@ -665,6 +680,7 @@ func scanPost(row rowScanner) (Post, error) {
 	p.CanonicalURL = stringOrEmpty(canonicalURL)
 	p.OGImage = stringOrEmpty(ogImage)
 	p.TranslationGroup = stringOrEmpty(translationGroup)
+	p.Metadata = metadataOrDefault(metadata)
 	p.ReviewNote = stringOrEmpty(reviewNote)
 	p.ReviewedBy = stringOrEmpty(reviewedBy)
 	if p.Locale == "" {

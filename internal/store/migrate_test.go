@@ -26,7 +26,7 @@ func TestUpAppliesInitMigrationAndIsIdempotent(t *testing.T) {
 	wantApplied := []string{
 		"0001_init", "0002_media", "0003_fts", "0004_webhook_filters",
 		"0005_author_profiles", "0006_localization", "0007_draft_review",
-		"0008_post_templates",
+		"0008_post_templates", "0009_post_metadata",
 	}
 	if len(applied) != len(wantApplied) {
 		t.Fatalf("store.Up() applied = %v, want %v", applied, wantApplied)
@@ -49,6 +49,7 @@ func TestUpAppliesInitMigrationAndIsIdempotent(t *testing.T) {
 	assertColumnExists(t, st, "settings", "available_locales")
 	assertColumnExists(t, st, "posts", "review_status")
 	assertColumnExists(t, st, "settings", "require_review_before_publish")
+	assertColumnExists(t, st, "posts", "metadata")
 
 	appliedAgain, err := store.Up(ctx, st.DB())
 	if err != nil {
@@ -80,18 +81,29 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertColumnExists(t, st, "webhooks", "filters")
 	assertColumnExists(t, st, "users", "slug")
 
-	// First Down reverts 0008_post_templates only.
+	// First Down reverts 0009_post_metadata only.
 	reverted, err := store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() error = %v", err)
 	}
+	if reverted != "0009_post_metadata" {
+		t.Fatalf("store.Down() reverted = %q, want %q", reverted, "0009_post_metadata")
+	}
+	assertColumnMissing(t, st, "posts", "metadata")
+	assertTableExists(t, st, "post_templates")
+
+	// Second Down reverts 0008_post_templates only.
+	reverted, err = store.Down(ctx, st.DB())
+	if err != nil {
+		t.Fatalf("store.Down() (templates) error = %v", err)
+	}
 	if reverted != "0008_post_templates" {
-		t.Fatalf("store.Down() reverted = %q, want %q", reverted, "0008_post_templates")
+		t.Fatalf("store.Down() (templates) reverted = %q, want %q", reverted, "0008_post_templates")
 	}
 	assertTableMissing(t, st, "post_templates")
 	assertColumnExists(t, st, "posts", "review_status")
 
-	// Second Down reverts 0007_draft_review only.
+	// Third Down reverts 0007_draft_review only.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (draft review) error = %v", err)
@@ -103,7 +115,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertColumnMissing(t, st, "settings", "require_review_before_publish")
 	assertColumnExists(t, st, "posts", "locale")
 
-	// Third Down reverts 0006_localization only.
+	// Fourth Down reverts 0006_localization only.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (localization) error = %v", err)
@@ -115,7 +127,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertColumnMissing(t, st, "settings", "available_locales")
 	assertColumnExists(t, st, "users", "slug")
 
-	// Fourth Down reverts 0005_author_profiles only.
+	// Fifth Down reverts 0005_author_profiles only.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (author profiles) error = %v", err)
@@ -126,7 +138,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertColumnMissing(t, st, "users", "slug")
 	assertColumnExists(t, st, "webhooks", "filters")
 
-	// Fifth Down reverts 0004_webhook_filters only.
+	// Sixth Down reverts 0004_webhook_filters only.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (filters) error = %v", err)
@@ -137,7 +149,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertColumnMissing(t, st, "webhooks", "filters")
 	assertTableExists(t, st, "posts_fts")
 
-	// Fifth Down reverts 0003_fts only.
+	// Seventh Down reverts 0003_fts only.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (fts) error = %v", err)
@@ -149,7 +161,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertTableExists(t, st, "media")
 	assertTableExists(t, st, "posts")
 
-	// Sixth Down reverts 0002_media only: media goes away, posts (from
+	// Eighth Down reverts 0002_media only: media goes away, posts (from
 	// 0001_init) is untouched.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
@@ -161,7 +173,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertTableMissing(t, st, "media")
 	assertTableExists(t, st, "posts")
 
-	// Seventh Down reverts 0001_init: posts goes away too.
+	// Ninth Down reverts 0001_init: posts goes away too.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (init) error = %v", err)
@@ -187,7 +199,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	wantAgain := []string{
 		"0001_init", "0002_media", "0003_fts", "0004_webhook_filters",
 		"0005_author_profiles", "0006_localization", "0007_draft_review",
-		"0008_post_templates",
+		"0008_post_templates", "0009_post_metadata",
 	}
 	if len(appliedAgain) != len(wantAgain) {
 		t.Fatalf("store.Up() (after down) applied = %v, want %v", appliedAgain, wantAgain)
@@ -207,6 +219,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertColumnExists(t, st, "settings", "available_locales")
 	assertColumnExists(t, st, "posts", "review_status")
 	assertColumnExists(t, st, "settings", "require_review_before_publish")
+	assertColumnExists(t, st, "posts", "metadata")
 }
 
 func assertTableExists(t *testing.T, st *store.Store, name string) {

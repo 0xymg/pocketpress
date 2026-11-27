@@ -82,6 +82,8 @@ export interface Post {
   /** Published translations of this post in other locales. */
   translations: Translation[];
   seo: Seo;
+  /** Free-form custom metadata object (product-specific fields). */
+  metadata: Record<string, unknown>;
   published_at: string;
   updated_at: string;
 }

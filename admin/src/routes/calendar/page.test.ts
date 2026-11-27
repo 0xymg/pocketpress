@@ -62,6 +62,7 @@ function calendarFetch(entries: ReturnType<typeof entry>[] = [entry()]) {
 							canonical_url: '',
 							translation_group: null,
 							translations: [],
+							metadata: {},
 							categories: [],
 							tags: [],
 							cover_image: null,
