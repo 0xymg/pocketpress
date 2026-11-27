@@ -9,6 +9,30 @@ import (
 	"time"
 )
 
+// WebhookFilters narrows which posts fire a webhook. Empty CategoryIDs and
+// TagIDs mean "any" (no filter). Non-empty lists require the post to match at
+// least one listed id in that dimension; both dimensions AND together.
+type WebhookFilters struct {
+	CategoryIDs []string `json:"category_ids"`
+	TagIDs      []string `json:"tag_ids"`
+}
+
+// Normalize returns a copy with nil slices coerced to empty slices so JSON
+// encoding and equality checks stay consistent.
+func (f WebhookFilters) Normalize() WebhookFilters {
+	out := WebhookFilters{
+		CategoryIDs: f.CategoryIDs,
+		TagIDs:      f.TagIDs,
+	}
+	if out.CategoryIDs == nil {
+		out.CategoryIDs = []string{}
+	}
+	if out.TagIDs == nil {
+		out.TagIDs = []string{}
+	}
+	return out
+}
+
 // Webhook is a row of the webhooks table: a subscription endpoint plus its
 // encrypted signing secret and the event names it wants delivered.
 type Webhook struct {
@@ -17,6 +41,7 @@ type Webhook struct {
 	URL             string
 	SecretEncrypted string // AES-256-GCM ciphertext, base64; never the raw secret
 	Events          []string
+	Filters         WebhookFilters
 	Active          bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -29,8 +54,11 @@ type NewWebhook struct {
 	URL             string
 	SecretEncrypted string
 	Events          []string
+	Filters         WebhookFilters
 	Active          bool
 }
+
+const webhookSelectCols = `id, name, url, secret_encrypted, events, filters, active, created_at, updated_at`
 
 // CreateWebhook inserts a webhook row and returns it as stored.
 func CreateWebhook(ctx context.Context, db DBTX, in NewWebhook) (Webhook, error) {
@@ -42,6 +70,10 @@ func CreateWebhook(ctx context.Context, db DBTX, in NewWebhook) (Webhook, error)
 	if err != nil {
 		return Webhook{}, err
 	}
+	filters, err := marshalFilters(in.Filters)
+	if err != nil {
+		return Webhook{}, err
+	}
 
 	now := time.Now().UTC()
 	w := Webhook{
@@ -50,15 +82,16 @@ func CreateWebhook(ctx context.Context, db DBTX, in NewWebhook) (Webhook, error)
 		URL:             in.URL,
 		SecretEncrypted: in.SecretEncrypted,
 		Events:          in.Events,
+		Filters:         in.Filters.Normalize(),
 		Active:          in.Active,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
 
 	_, err = db.ExecContext(ctx, `
-		INSERT INTO webhooks (id, name, url, secret_encrypted, events, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		w.ID, w.Name, w.URL, w.SecretEncrypted, events, boolToInt(w.Active),
+		INSERT INTO webhooks (id, name, url, secret_encrypted, events, filters, active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		w.ID, w.Name, w.URL, w.SecretEncrypted, events, filters, boolToInt(w.Active),
 		formatTime(w.CreatedAt), formatTime(w.UpdatedAt),
 	)
 	if err != nil {
@@ -71,7 +104,7 @@ func CreateWebhook(ctx context.Context, db DBTX, in NewWebhook) (Webhook, error)
 // exists.
 func GetWebhookByID(ctx context.Context, db DBTX, id string) (Webhook, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT id, name, url, secret_encrypted, events, active, created_at, updated_at
+		SELECT `+webhookSelectCols+`
 		FROM webhooks WHERE id = ?`, id)
 	return scanWebhook(row)
 }
@@ -80,7 +113,7 @@ func GetWebhookByID(ctx context.Context, db DBTX, id string) (Webhook, error) {
 // tiebreak for a stable order).
 func ListWebhooks(ctx context.Context, db DBTX) ([]Webhook, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, name, url, secret_encrypted, events, active, created_at, updated_at
+		SELECT `+webhookSelectCols+`
 		FROM webhooks ORDER BY created_at ASC, id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query webhooks: %w", err)
@@ -89,12 +122,12 @@ func ListWebhooks(ctx context.Context, db DBTX) ([]Webhook, error) {
 }
 
 // ListActiveWebhooks returns every active webhook. The dispatcher filters the
-// result by event membership in Go (the events column is a JSON array, so a
-// per-event SQL predicate would need the JSON1 extension); the set of
-// webhooks is small, so an in-memory filter is the boring, portable choice.
+// result by event membership and content filters in Go (the events/filters
+// columns are JSON, so SQL predicates would need JSON1); the set of webhooks
+// is small, so an in-memory filter is the boring, portable choice.
 func ListActiveWebhooks(ctx context.Context, db DBTX) ([]Webhook, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, name, url, secret_encrypted, events, active, created_at, updated_at
+		SELECT `+webhookSelectCols+`
 		FROM webhooks WHERE active = 1 ORDER BY created_at ASC, id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query active webhooks: %w", err)
@@ -110,6 +143,7 @@ type WebhookUpdate struct {
 	URL             string
 	SecretEncrypted string
 	Events          []string
+	Filters         WebhookFilters
 	Active          bool
 }
 
@@ -120,10 +154,14 @@ func UpdateWebhook(ctx context.Context, db DBTX, id string, in WebhookUpdate) er
 	if err != nil {
 		return err
 	}
+	filters, err := marshalFilters(in.Filters)
+	if err != nil {
+		return err
+	}
 	res, err := db.ExecContext(ctx, `
-		UPDATE webhooks SET name = ?, url = ?, secret_encrypted = ?, events = ?, active = ?, updated_at = ?
+		UPDATE webhooks SET name = ?, url = ?, secret_encrypted = ?, events = ?, filters = ?, active = ?, updated_at = ?
 		WHERE id = ?`,
-		in.Name, in.URL, in.SecretEncrypted, events, boolToInt(in.Active),
+		in.Name, in.URL, in.SecretEncrypted, events, filters, boolToInt(in.Active),
 		formatTime(time.Now().UTC()), id,
 	)
 	if err != nil {
@@ -177,11 +215,12 @@ func scanWebhook(row rowScanner) (Webhook, error) {
 	var (
 		w         Webhook
 		events    string
+		filters   string
 		active    int
 		createdAt string
 		updatedAt string
 	)
-	err := row.Scan(&w.ID, &w.Name, &w.URL, &w.SecretEncrypted, &events, &active, &createdAt, &updatedAt)
+	err := row.Scan(&w.ID, &w.Name, &w.URL, &w.SecretEncrypted, &events, &filters, &active, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Webhook{}, ErrNotFound
 	}
@@ -191,6 +230,9 @@ func scanWebhook(row rowScanner) (Webhook, error) {
 
 	w.Active = active != 0
 	if w.Events, err = unmarshalEvents(events); err != nil {
+		return Webhook{}, err
+	}
+	if w.Filters, err = unmarshalFilters(filters); err != nil {
 		return Webhook{}, err
 	}
 	if w.CreatedAt, err = parseTime(createdAt); err != nil {
@@ -221,4 +263,23 @@ func unmarshalEvents(raw string) ([]string, error) {
 		return nil, fmt.Errorf("unmarshal webhook events: %w", err)
 	}
 	return events, nil
+}
+
+func marshalFilters(f WebhookFilters) (string, error) {
+	b, err := json.Marshal(f.Normalize())
+	if err != nil {
+		return "", fmt.Errorf("marshal webhook filters: %w", err)
+	}
+	return string(b), nil
+}
+
+func unmarshalFilters(raw string) (WebhookFilters, error) {
+	if raw == "" {
+		return WebhookFilters{CategoryIDs: []string{}, TagIDs: []string{}}, nil
+	}
+	var f WebhookFilters
+	if err := json.Unmarshal([]byte(raw), &f); err != nil {
+		return WebhookFilters{}, fmt.Errorf("unmarshal webhook filters: %w", err)
+	}
+	return f.Normalize(), nil
 }

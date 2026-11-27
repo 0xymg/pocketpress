@@ -85,6 +85,80 @@ func TestDispatchFanOut(t *testing.T) {
 	}
 }
 
+// TestDispatchRespectsFilters confirms category/tag filters skip non-matching
+// posts while still delivering to unfiltered and matching webhooks.
+func TestDispatchRespectsFilters(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	dp := NewDispatcher(db, nil)
+
+	cat, err := store.CreateCategory(ctx, db, store.NewCategory{Name: "News", Slug: "news"})
+	if err != nil {
+		t.Fatalf("CreateCategory() error = %v", err)
+	}
+	tag, err := store.CreateTag(ctx, db, store.NewTag{Name: "Release", Slug: "release"})
+	if err != nil {
+		t.Fatalf("CreateTag() error = %v", err)
+	}
+
+	all := insertWebhook(t, db, "all", "https://all.example.com", []string{EventPostPublished}, true)
+	catOnly := insertWebhookWithFilters(t, db, "cat", "https://cat.example.com",
+		[]string{EventPostPublished}, true, store.WebhookFilters{CategoryIDs: []string{cat.ID}})
+	tagOnly := insertWebhookWithFilters(t, db, "tag", "https://tag.example.com",
+		[]string{EventPostPublished}, true, store.WebhookFilters{TagIDs: []string{tag.ID}})
+	both := insertWebhookWithFilters(t, db, "both", "https://both.example.com",
+		[]string{EventPostPublished}, true, store.WebhookFilters{
+			CategoryIDs: []string{cat.ID}, TagIDs: []string{tag.ID},
+		})
+	otherCat := insertWebhookWithFilters(t, db, "other", "https://other.example.com",
+		[]string{EventPostPublished}, true, store.WebhookFilters{CategoryIDs: []string{"missing-id"}})
+
+	match := &content.Post{
+		Row:        store.Post{ID: "p-match", Slug: "match", Status: store.PostStatusPublished},
+		Categories: []store.Category{cat},
+		Tags:       []store.Tag{tag},
+	}
+	dp.PostPublished(ctx, match)
+
+	assertDeliveryCount := func(name, id string, want int) {
+		t.Helper()
+		if got := len(deliveries(t, db, id)); got != want {
+			t.Fatalf("%s deliveries = %d, want %d", name, got, want)
+		}
+	}
+	assertDeliveryCount("all", all.ID, 1)
+	assertDeliveryCount("cat", catOnly.ID, 1)
+	assertDeliveryCount("tag", tagOnly.ID, 1)
+	assertDeliveryCount("both", both.ID, 1)
+	assertDeliveryCount("other", otherCat.ID, 0)
+
+	// Category-only post: tag filter and AND filter must skip.
+	catPost := &content.Post{
+		Row:        store.Post{ID: "p-cat", Slug: "cat-only", Status: store.PostStatusPublished},
+		Categories: []store.Category{cat},
+	}
+	dp.PostPublished(ctx, catPost)
+	assertDeliveryCount("all after cat-only", all.ID, 2)
+	assertDeliveryCount("cat after cat-only", catOnly.ID, 2)
+	assertDeliveryCount("tag after cat-only", tagOnly.ID, 1)
+	assertDeliveryCount("both after cat-only", both.ID, 1)
+}
+
+// TestEnqueueTestIgnoresFilters confirms Send Test bypasses content filters
+// the same way it bypasses event subscription.
+func TestEnqueueTestIgnoresFilters(t *testing.T) {
+	db := newTestDB(t)
+	wh := insertWebhookWithFilters(t, db, "filtered", "https://x.example.com", nil, true,
+		store.WebhookFilters{CategoryIDs: []string{"cat-never"}})
+	id, err := NewDispatcher(db, nil).EnqueueTest(context.Background(), wh.ID)
+	if err != nil {
+		t.Fatalf("EnqueueTest() error = %v", err)
+	}
+	if getDelivery(t, db, id).Event != EventTest {
+		t.Fatalf("expected webhook.test despite filters")
+	}
+}
+
 // TestEnqueueTestIgnoresSubscription confirms a test delivery is enqueued
 // regardless of the webhook's event subscription, with the webhook.test event
 // and its frozen data shape.

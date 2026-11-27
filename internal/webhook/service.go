@@ -18,9 +18,11 @@ const webhookNameMax = 200
 
 // Validation messages.
 const (
-	nameRequiredMessage  = "Name is required."
-	nameTooLongMessage   = "Name must be at most 200 characters."
-	eventsInvalidMessage = "Events must be a subset of: post.published, post.updated, post.unpublished, post.deleted."
+	nameRequiredMessage   = "Name is required."
+	nameTooLongMessage    = "Name must be at most 200 characters."
+	eventsInvalidMessage  = "Events must be a subset of: post.published, post.updated, post.unpublished, post.deleted."
+	categoryFilterMessage = "One or more category_ids do not exist."
+	tagFilterMessage      = "One or more tag_ids do not exist."
 )
 
 // ErrDeliveryNotFailed is returned by RetryDelivery when the delivery is not
@@ -51,20 +53,23 @@ func NewService(db *sql.DB, cipher *Cipher, dispatcher *Dispatcher, production b
 }
 
 // CreateInput is the resolved create body for a webhook. Active defaults to
-// true at the HTTP layer when the field is absent.
+// true at the HTTP layer when the field is absent. Filters default to empty
+// (match all posts) when omitted.
 type CreateInput struct {
-	Name   string
-	URL    string
-	Events []string
-	Active bool
+	Name    string
+	URL     string
+	Events  []string
+	Filters store.WebhookFilters
+	Active  bool
 }
 
 // UpdatePatch is the partial-update body: each nil field is left unchanged.
 type UpdatePatch struct {
-	Name   *string
-	URL    *string
-	Events *[]string
-	Active *bool
+	Name    *string
+	URL     *string
+	Events  *[]string
+	Filters *store.WebhookFilters
+	Active  *bool
 }
 
 // List returns every webhook, oldest first.
@@ -86,6 +91,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (store.Webhook, st
 	name := validateName(in.Name, fields)
 	url := validateURL(in.URL, s.production, fields)
 	events := validateEvents(in.Events, fields)
+	filters := s.validateFilters(ctx, in.Filters, fields)
 	if len(fields) > 0 {
 		return store.Webhook{}, "", &content.ValidationError{Fields: fields}
 	}
@@ -104,6 +110,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (store.Webhook, st
 		URL:             url,
 		SecretEncrypted: encrypted,
 		Events:          events,
+		Filters:         filters,
 		Active:          in.Active,
 	})
 	if err != nil {
@@ -135,6 +142,10 @@ func (s *Service) Update(ctx context.Context, id string, patch UpdatePatch) (sto
 	if patch.Events != nil {
 		events = validateEvents(*patch.Events, fields)
 	}
+	filters := existing.Filters
+	if patch.Filters != nil {
+		filters = s.validateFilters(ctx, *patch.Filters, fields)
+	}
 	active := existing.Active
 	if patch.Active != nil {
 		active = *patch.Active
@@ -148,6 +159,7 @@ func (s *Service) Update(ctx context.Context, id string, patch UpdatePatch) (sto
 		URL:             url,
 		SecretEncrypted: existing.SecretEncrypted,
 		Events:          events,
+		Filters:         filters,
 		Active:          active,
 	}); err != nil {
 		return store.Webhook{}, err
@@ -290,6 +302,52 @@ func validateEvents(events []string, fields map[string]string) []string {
 		}
 		seen[e] = true
 		out = append(out, e)
+	}
+	return out
+}
+
+// validateFilters de-duplicates ids, confirms every category/tag id exists,
+// and records field errors under "filters" / "category_ids" / "tag_ids".
+func (s *Service) validateFilters(ctx context.Context, in store.WebhookFilters, fields map[string]string) store.WebhookFilters {
+	cats := dedupeIDs(in.CategoryIDs)
+	tags := dedupeIDs(in.TagIDs)
+
+	for _, id := range cats {
+		if id == "" {
+			fields["category_ids"] = categoryFilterMessage
+			continue
+		}
+		if _, err := store.GetCategoryByID(ctx, s.db, id); err != nil {
+			fields["category_ids"] = categoryFilterMessage
+			break
+		}
+	}
+	for _, id := range tags {
+		if id == "" {
+			fields["tag_ids"] = tagFilterMessage
+			continue
+		}
+		if _, err := store.GetTagByID(ctx, s.db, id); err != nil {
+			fields["tag_ids"] = tagFilterMessage
+			break
+		}
+	}
+	return store.WebhookFilters{CategoryIDs: cats, TagIDs: tags}.Normalize()
+}
+
+func dedupeIDs(ids []string) []string {
+	if ids == nil {
+		return []string{}
+	}
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
 	}
 	return out
 }

@@ -640,11 +640,18 @@ export function deleteMedia(id: string): Promise<void> {
 
 export type WebhookEvent = 'post.published' | 'post.updated' | 'post.unpublished' | 'post.deleted';
 
+/** Optional content filters (v0.2). Empty arrays match every post. */
+export interface WebhookFilters {
+	category_ids: string[];
+	tag_ids: string[];
+}
+
 export interface Webhook {
 	id: string;
 	name: string;
 	url: string;
 	events: WebhookEvent[];
+	filters: WebhookFilters;
 	active: boolean;
 	created_at: string;
 }
@@ -653,6 +660,7 @@ export interface WebhookPayload {
 	name: string;
 	url: string;
 	events: WebhookEvent[];
+	filters?: WebhookFilters;
 	active?: boolean;
 }
 
