@@ -58,6 +58,7 @@ func newTestEnv(t *testing.T, secureCookies bool) *testEnv {
 		DB:            st.DB(),
 		SecureCookies: secureCookies,
 		MediaDriver:   mediaDriver,
+		DataDir:       dataDir,
 		MaxUploadMB:   10,
 		AppSecret:     testAppSecret,
 	})

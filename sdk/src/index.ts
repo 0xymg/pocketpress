@@ -10,6 +10,7 @@ export type {
   DataResponse,
   GetPostResult,
   HealthResponse,
+  ImageTransformOptions,
   Meta,
   PocketPressErrorBody,
   Post,

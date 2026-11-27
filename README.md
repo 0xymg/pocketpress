@@ -107,6 +107,8 @@ curl https://cms.example.com/api/v1/sitemap.xml
 
 Full-text search (`q`) matches title, excerpt, and body plain text (SQLite FTS5). Results are ranked by relevance when `q` is set.
 
+Media URLs (`/api/files/{id}/{filename}`) accept optional image transforms: `?w=&h=&fit=contain|cover|fill&fm=jpeg|png&q=82`. Variants are cached under `<PP_DATA_DIR>/transforms/`.
+
 **Response structure:**
 
 ```json

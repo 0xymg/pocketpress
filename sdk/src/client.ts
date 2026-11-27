@@ -4,6 +4,7 @@ import type {
   DataResponse,
   GetPostResult,
   HealthResponse,
+  ImageTransformOptions,
   Post,
   PostListParams,
   PostListResponse,
@@ -95,6 +96,28 @@ export class PocketPress {
     }
     const path = pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`;
     return `${this.baseUrl}${path}`;
+  }
+
+  /**
+   * Build an absolute media URL with optional on-demand transform query
+   * params (`w`, `h`, `fit`, `fm`, `q`). `pathOrUrl` may be relative
+   * (`/api/files/...`) or absolute.
+   */
+  transformUrl(
+    pathOrUrl: string | null | undefined,
+    opts?: ImageTransformOptions,
+  ): string | null {
+    const resolved = this.resolveUrl(pathOrUrl);
+    if (resolved == null || !opts) {
+      return resolved;
+    }
+    const url = new URL(resolved);
+    if (opts.w != null) url.searchParams.set("w", String(opts.w));
+    if (opts.h != null) url.searchParams.set("h", String(opts.h));
+    if (opts.fit != null) url.searchParams.set("fit", opts.fit);
+    if (opts.fm != null) url.searchParams.set("fm", opts.fm);
+    if (opts.q != null) url.searchParams.set("q", String(opts.q));
+    return url.toString();
   }
 
   /** Absolute URL for a public API path (e.g. `/api/v1/posts`). */

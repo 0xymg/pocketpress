@@ -46,6 +46,10 @@ type Config struct {
 	// rather than on the first upload.
 	MediaDriver media.Driver
 
+	// DataDir is PP_DATA_DIR. The media service roots its on-demand
+	// transform cache at <DataDir>/transforms.
+	DataDir string
+
 	// MaxUploadMB caps a single media upload's size, in megabytes.
 	MaxUploadMB int
 
@@ -135,7 +139,7 @@ func Build(cfg Config) *Server {
 
 	authService := auth.NewService(cfg.DB, cfg.Logger)
 	contentService := content.NewService(cfg.DB, cfg.Logger)
-	mediaService := media.NewService(cfg.DB, cfg.MediaDriver, cfg.MaxUploadMB, cfg.Logger)
+	mediaService := media.NewService(cfg.DB, cfg.MediaDriver, cfg.MaxUploadMB, cfg.DataDir, cfg.Logger)
 	previewTokens := preview.New(cfg.AppSecret)
 
 	// Webhook subsystem: the dispatcher becomes the content service's event

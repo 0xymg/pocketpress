@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -55,16 +56,27 @@ type Service struct {
 	storageName string
 	logger      *slog.Logger
 	maxUploadMB int
+	// cacheDir is <PP_DATA_DIR>/transforms: on-demand resize/re-encode
+	// variants are cached here regardless of whether originals live on
+	// local disk or S3. Empty disables the disk cache (transforms still
+	// work; each request re-encodes).
+	cacheDir string
 }
 
 // NewService builds a media Service. maxUploadMB <= 0 falls back to
-// defaultMaxUploadMB.
-func NewService(db *sql.DB, driver Driver, maxUploadMB int, logger *slog.Logger) *Service {
+// defaultMaxUploadMB. dataDir is PP_DATA_DIR; the transform cache is rooted
+// at <dataDir>/transforms (created lazily on first transform). An empty
+// dataDir disables disk caching.
+func NewService(db *sql.DB, driver Driver, maxUploadMB int, dataDir string, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
 	if maxUploadMB <= 0 {
 		maxUploadMB = defaultMaxUploadMB
+	}
+	cacheDir := ""
+	if strings.TrimSpace(dataDir) != "" {
+		cacheDir = filepath.Join(dataDir, transformsSubdir)
 	}
 	return &Service{
 		db:          db,
@@ -72,6 +84,7 @@ func NewService(db *sql.DB, driver Driver, maxUploadMB int, logger *slog.Logger)
 		storageName: storageName(driver),
 		logger:      logger,
 		maxUploadMB: maxUploadMB,
+		cacheDir:    cacheDir,
 	}
 }
 
@@ -297,6 +310,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		s.logger.Error("failed to delete stored media file",
 			slog.String("media_id", id), slog.String("error", err.Error()))
 	}
+	s.clearTransformCache(id)
 
 	s.logger.Info("media deleted", slog.String("media_id", id))
 	return nil
@@ -317,4 +331,79 @@ func (s *Service) Open(ctx context.Context, id string) (store.Media, io.ReadClos
 		return store.Media{}, nil, err
 	}
 	return m, rc, nil
+}
+
+// OpenTransformed opens media id and returns either the original bytes (when
+// t is inactive) or a resized/re-encoded variant. Cached variants live under
+// <dataDir>/transforms/{id}/. The caller must Close Transformed.Body.
+func (s *Service) OpenTransformed(ctx context.Context, id string, t Transform) (store.Media, Transformed, error) {
+	m, err := store.GetMediaByID(ctx, s.db, id)
+	if err != nil {
+		return store.Media{}, Transformed{}, err
+	}
+
+	if !t.Active() {
+		rc, err := s.driver.Open(ctx, m.FileKey)
+		if err != nil {
+			return store.Media{}, Transformed{}, err
+		}
+		return m, Transformed{Mime: m.Mime, Size: m.Size, Body: rc}, nil
+	}
+
+	// Resolve auto format before the cache key so fm="" and the chosen
+	// default share one cache entry.
+	resolved := t
+	if resolved.Format == "" {
+		resolved.Format = autoFormat(m.Mime)
+	}
+	if resolved.Quality <= 0 {
+		resolved.Quality = defaultJPEGQuality
+	}
+	if resolved.Fit == "" {
+		resolved.Fit = FitContain
+	}
+
+	mime, ext := "image/jpeg", ".jpg"
+	if resolved.Format == FormatPNG {
+		mime, ext = "image/png", ".png"
+	}
+
+	cachePath := ""
+	if s.cacheDir != "" {
+		cachePath = s.transformCachePath(m.ID, resolved.cacheKey(m.FileKey), ext)
+		if rc, size, err := s.readTransformCache(cachePath); err == nil {
+			return m, Transformed{Mime: mime, Size: size, Body: rc}, nil
+		} else if !os.IsNotExist(err) {
+			s.logger.Error("failed to read transform cache",
+				slog.String("media_id", id), slog.String("error", err.Error()))
+		}
+	}
+
+	rc, err := s.driver.Open(ctx, m.FileKey)
+	if err != nil {
+		return store.Media{}, Transformed{}, err
+	}
+	src, err := io.ReadAll(rc)
+	_ = rc.Close()
+	if err != nil {
+		return store.Media{}, Transformed{}, fmt.Errorf("read media for transform: %w", err)
+	}
+
+	out, outMime, err := applyTransform(src, m.Mime, resolved)
+	if err != nil {
+		return store.Media{}, Transformed{}, err
+	}
+
+	if cachePath != "" {
+		if err := s.writeTransformCache(cachePath, out); err != nil {
+			s.logger.Error("failed to write transform cache",
+				slog.String("media_id", id), slog.String("error", err.Error()))
+		}
+	}
+
+	return m, Transformed{
+		Mime: outMime,
+		Size: int64(len(out)),
+		Body: io.NopCloser(bytes.NewReader(out)),
+	}, nil
 }

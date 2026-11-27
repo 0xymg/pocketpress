@@ -249,3 +249,19 @@ Every post includes these fields. See `api/openapi.yaml` for full details:
 ```
 
 File URLs (`cover_image.url`, `seo.og_image_url`) are relative paths. Resolve them against the PocketPress instance URL (e.g., `PP_PUBLIC_URL`).
+
+### Image transforms
+
+`GET /api/files/{id}/{filename}` accepts optional query parameters to resize or re-encode on demand (results cached under `<PP_DATA_DIR>/transforms/`):
+
+| Param | Meaning |
+|-------|---------|
+| `w` | Target width (1–4096). Never upscales past the source. |
+| `h` | Target height (1–4096). |
+| `fit` | `contain` (default), `cover`, or `fill`. `cover`/`fill` require both `w` and `h`. |
+| `fm` | Output format: `jpeg` / `jpg` / `png`. Default: PNG for PNG/GIF sources, JPEG otherwise. |
+| `q` | JPEG quality 1–100 (default 82). |
+
+Example: `/api/files/{id}/cover.jpg?w=800&fm=jpeg&q=80`.
+
+The TypeScript SDK helper `client.transformUrl(path, { w, h, fit, fm, q })` appends these params and resolves against `baseUrl`.

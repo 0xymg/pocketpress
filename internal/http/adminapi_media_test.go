@@ -472,6 +472,57 @@ func TestServeFileNotFound(t *testing.T) {
 	}
 }
 
+// TestServeFileTransformResize confirms ?w= resizes a PNG and returns
+// image/png (auto format for PNG sources).
+func TestServeFileTransformResize(t *testing.T) {
+	env := newTestEnv(t, false)
+	env.setup(t)
+
+	data := pngBytes(t)
+	m := env.createMedia(t, "photo.png", data)
+
+	anon := &http.Client{}
+	resp, err := anon.Get(env.srv.URL + m["url"].(string) + "?w=2")
+	if err != nil {
+		t.Fatalf("GET transformed file: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("transform status = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "image/png" {
+		t.Fatalf("Content-Type = %q, want image/png", got)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if len(body) == 0 || bytes.Equal(body, data) {
+		t.Fatalf("transformed body should differ from the original upload")
+	}
+}
+
+// TestServeFileTransformValidation confirms invalid transform params return
+// the standard validation_failed envelope.
+func TestServeFileTransformValidation(t *testing.T) {
+	env := newTestEnv(t, false)
+	env.setup(t)
+
+	m := env.createMedia(t, "photo.png", pngBytes(t))
+
+	anon := &http.Client{}
+	resp, err := anon.Get(env.srv.URL + m["url"].(string) + "?w=0")
+	if err != nil {
+		t.Fatalf("GET bad transform: %v", err)
+	}
+	raw, body := readJSON(t, resp)
+	if resp.StatusCode != http.StatusBadRequest || errorCode(t, body) != "validation_failed" {
+		t.Fatalf("bad transform = %d %s, want 400 validation_failed; body = %s",
+			resp.StatusCode, errorCode(t, body), raw)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Posts integration: cover_image / og_image
 // ---------------------------------------------------------------------------
