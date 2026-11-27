@@ -62,12 +62,6 @@ Features that serve newsletters, commerce, community, memberships, or help build
 
 ## Current phase
 
-**v0.1 MVP complete** — all eight development-plan phases (repository foundation, schema/setup/auth, content CRUD, Lexical editor + media, public /api/v1, publishing/scheduling/preview, webhooks, backup/hardening/e2e) are implemented and verified as of 2026-08-02.
+**v0.2 in progress** — first slice: RSS/Atom feed endpoints (`GET /api/v1/feed.rss`, `GET /api/v1/feed.atom`).
 
-Verified state:
-- [x] Full Go test suite green (also under `-race`); admin vitest suite green; svelte-check clean
-- [x] Playwright e2e golden path passes (e2e/, setup → publish → public API → signed webhook → revision → unpublish)
-- [x] `make build` produces the single binary; Docker image verified
-- [x] api/openapi.yaml documents the public API; README + docs/integration.md current
-
-Anything beyond plan section 15's definition of done belongs to v0.2+ (see section 16). Update this section as new work begins.
+v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02). Remaining v0.2 items from plan §16 (do not skip ahead within a PR): sitemap, JS/TS SDK, Markdown/Ghost/WP import, FTS, image transforms, webhook filters, API key management.
