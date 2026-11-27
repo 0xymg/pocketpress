@@ -14,6 +14,7 @@ describe('activeKeyFromPath', () => {
 		['/settings/users', 'users'],
 		['/settings/general', 'settings'],
 		['/settings/webhooks', 'webhooks'],
+		['/settings/api-keys', 'api-keys'],
 		['/login', null],
 		['/setup', null],
 		['/nonexistent', null]
@@ -50,7 +51,7 @@ describe('NAV_GROUPS', () => {
 
 		expect(system).toBeDefined();
 		expect(system?.ownerOnly).toBe(true);
-		expect(system?.items.map((i) => i.key)).toEqual(['users', 'settings', 'webhooks']);
+		expect(system?.items.map((i) => i.key)).toEqual(['users', 'settings', 'webhooks', 'api-keys']);
 	});
 
 	it('gives every item a unique key and a leading-slash href', () => {

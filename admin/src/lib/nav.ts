@@ -16,7 +16,8 @@ export type NavKey =
 	| 'media'
 	| 'users'
 	| 'settings'
-	| 'webhooks';
+	| 'webhooks'
+	| 'api-keys';
 
 export interface NavItem {
 	key: NavKey;
@@ -55,7 +56,8 @@ export const NAV_GROUPS: NavGroup[] = [
 		items: [
 			{ key: 'users', href: '/settings/users', label: 'Users' },
 			{ key: 'settings', href: '/settings/general', label: 'Settings' },
-			{ key: 'webhooks', href: '/settings/webhooks', label: 'Webhooks' }
+			{ key: 'webhooks', href: '/settings/webhooks', label: 'Webhooks' },
+			{ key: 'api-keys', href: '/settings/api-keys', label: 'API keys' }
 		]
 	}
 ];
@@ -74,6 +76,7 @@ export function activeKeyFromPath(pathname: string): NavKey | null {
 	if (pathname.startsWith('/settings/users')) return 'users';
 	if (pathname.startsWith('/settings/general')) return 'settings';
 	if (pathname.startsWith('/settings/webhooks')) return 'webhooks';
+	if (pathname.startsWith('/settings/api-keys')) return 'api-keys';
 	return null;
 }
 

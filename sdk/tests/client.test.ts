@@ -46,6 +46,24 @@ describe("PocketPress client", () => {
     expect(client.baseUrl).toBe("https://cms.example.com");
   });
 
+  it("sends Authorization when apiKey is set", async () => {
+    const fetchMock = vi.fn(async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer ppkey_test_secret");
+      return jsonResponse({
+        data: [],
+        meta: { page: 1, per_page: 20, total_items: 0, total_pages: 0 },
+      });
+    });
+    const client = new PocketPress({
+      baseUrl: "https://cms.example.com",
+      apiKey: "ppkey_test_secret",
+      fetch: fetchMock,
+    });
+    await client.posts.list();
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("lists posts with query params", async () => {
     const fetchMock = vi.fn(async (input: string | URL) => {
       expect(String(input)).toBe(

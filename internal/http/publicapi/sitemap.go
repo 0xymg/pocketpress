@@ -38,7 +38,7 @@ func (h *Handler) sitemap(w http.ResponseWriter, r *http.Request) {
 
 	doc := buildSitemap(settings, posts)
 
-	w.Header().Set("Cache-Control", listCacheControl)
+	w.Header().Set("Cache-Control", resolveCacheControl(r.Context(), listCacheControl))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Type", sitemapContentType)
 	w.WriteHeader(http.StatusOK)

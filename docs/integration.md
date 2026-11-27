@@ -11,6 +11,8 @@ import { PocketPress, PocketPressError, verifyWebhookSignature } from "@pocketpr
 
 const pp = new PocketPress({
   baseUrl: process.env.POCKETPRESS_URL ?? "http://localhost:8090",
+  // Required when Settings → Public API is disabled (scope content:read).
+  // apiKey: process.env.POCKETPRESS_API_KEY,
 });
 
 const { data: posts } = await pp.posts.list({ page: 1, featured: true });
@@ -125,6 +127,29 @@ GET /api/v1/sitemap.xml
 ```
 
 Post `<loc>` values use `canonical_url` when set; otherwise `{site_url}/{slug}`. Also gated by `public_api_enabled`.
+
+## Private content API (API keys)
+
+When **Settings → General → Public API** is disabled, unauthenticated `/api/v1/*` requests return `404 api_disabled`. Create an API key under **Settings → API keys** (owner only) with scope `content:read`, then send it as a Bearer token:
+
+```bash
+curl http://localhost:8090/api/v1/posts \
+  -H "Authorization: Bearer ppkey_…"
+```
+
+Scopes:
+
+- `content:read` — posts, categories, tags, feeds, sitemap
+- `preview:read` — `GET /api/v1/preview/posts/{slug}` without a short-lived preview token
+
+The raw key is shown once at creation and stored only as a SHA-256 hash. With the SDK:
+
+```typescript
+const pp = new PocketPress({
+  baseUrl: CMS_URL,
+  apiKey: process.env.POCKETPRESS_API_KEY,
+});
+```
 
 ## CORS setup
 

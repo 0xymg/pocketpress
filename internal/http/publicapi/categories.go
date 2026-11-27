@@ -19,7 +19,7 @@ func (h *Handler) listCategories(w http.ResponseWriter, r *http.Request) {
 	for _, c := range cats {
 		dtos = append(dtos, toCategoryDTO(c))
 	}
-	h.writeData(w, http.StatusOK, listCacheControl, dtos)
+	h.writeData(w, r, http.StatusOK, listCacheControl, dtos)
 }
 
 // getCategory handles GET /api/v1/categories/{slug}.
@@ -33,7 +33,7 @@ func (h *Handler) getCategory(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
-	h.writeData(w, http.StatusOK, listCacheControl, toCategoryDTO(cat))
+	h.writeData(w, r, http.StatusOK, listCacheControl, toCategoryDTO(cat))
 }
 
 // categoryPosts handles GET /api/v1/categories/{slug}/posts: the same
@@ -58,7 +58,7 @@ func (h *Handler) categoryPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !tagOK {
-		h.writePostList(w, nil, parsePage(q), parsePerPage(q), 0)
+		h.writePostList(w, r, nil, parsePage(q), parsePerPage(q), 0)
 		return
 	}
 
@@ -78,5 +78,5 @@ func (h *Handler) categoryPosts(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
-	h.writePostList(w, result.Posts, result.Page, result.PerPage, result.TotalItems)
+	h.writePostList(w, r, result.Posts, result.Page, result.PerPage, result.TotalItems)
 }

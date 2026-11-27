@@ -5,32 +5,58 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pocketpress/pocketpress/internal/apikey"
 	"github.com/pocketpress/pocketpress/internal/http/middleware"
 	"github.com/pocketpress/pocketpress/internal/preview"
 	"github.com/pocketpress/pocketpress/internal/store"
 )
 
-// previewPost handles GET /api/v1/preview/posts/{slug}?token=... — the
-// authorized draft-preview endpoint. It verifies the token, loads the post by
-// slug regardless of status, and confirms the token was minted for that exact
-// post before serving it with the same public serializer as the published
-// detail endpoint. Responses are never cached.
+// previewPost handles GET /api/v1/preview/posts/{slug} — the authorized
+// draft-preview endpoint. Authorization is either:
+//   - ?token=… — a short-lived, post-scoped preview token (existing flow), or
+//   - Authorization: Bearer ppkey_… with scope preview:read (private API key).
 //
-// Failure modes, checked in this order:
-//   - missing/invalid/expired token  -> 401 invalid_preview_token
+// Responses are never cached. Failure modes:
+//   - no usable token or API key     -> 401 invalid_preview_token / unauthorized
+//   - API key missing preview:read   -> 403 forbidden
 //   - no post with that slug         -> 404 post_not_found
 //   - token bound to a different post -> 401 invalid_preview_token
 func (h *Handler) previewPost(w http.ResponseWriter, r *http.Request) {
 	token := r.URL.Query().Get("token")
-	if token == "" {
-		h.invalidPreviewToken(w)
+	if token != "" {
+		h.previewWithToken(w, r, token)
 		return
 	}
 
+	k, presented, err := h.authenticateAPIKey(r.Context(), r, apikey.ScopePreviewRead)
+	if err != nil {
+		h.writeAPIKeyAuthError(w, err)
+		return
+	}
+	if !presented {
+		h.invalidPreviewToken(w)
+		return
+	}
+	_ = k
+
+	p, err := h.content.GetPostBySlugForPreview(r.Context(), r.PathValue("slug"))
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			h.postNotFound(w)
+			return
+		}
+		h.serverError(w, err)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	middleware.WriteJSON(w, http.StatusOK, map[string]any{"data": toPostDTO(p)})
+}
+
+func (h *Handler) previewWithToken(w http.ResponseWriter, r *http.Request, token string) {
 	postID, err := h.preview.Verify(token, time.Now().UTC())
 	if err != nil {
-		// preview.ErrInvalidToken (or any verify failure) is an authorization
-		// failure, not a server error.
 		if errors.Is(err, preview.ErrInvalidToken) {
 			h.invalidPreviewToken(w)
 			return
