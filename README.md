@@ -178,7 +178,23 @@ curl -X POST https://cms.example.com/api/admin/v1/posts/import/markdown \
   -d '{"documents":[{"filename":"hello.md","markdown":"---\ntitle: Hello\ntags: [Go]\n---\n\n## Section\n\nBody.\n"}]}'
 ```
 
-Optional YAML frontmatter: `title`, `slug`, `excerpt`, `status` (`draft`|`published`), `featured`, `tags`, `categories`, `seo_title`, `seo_description`, `canonical_url`. Categories/tags are matched by slugified name and created when missing. Bodies convert to Lexical `content_json` + sanitized HTML. Multipart uploads use the `files` field (max 50 docs, 2 MiB each).
+Optional YAML frontmatter (common aliases accepted):
+
+| Post field | Keys (first match wins) |
+|---|---|
+| title | `title` |
+| slug | `slug`, `permalink`, `url`, `path` (last path segment) |
+| excerpt | `excerpt`, `summary`, `custom_excerpt`, `description` |
+| status | `status` (`draft`/`published`, also `publish`/`public`/`live`/`unpublished`), or `draft: true\|false`, or `published: true\|false` |
+| published_at | `published_at`, `date`, `publish_date`, or a timestamp `published` (implies published) |
+| featured | `featured`, `feature` |
+| tags | `tags`, `tag` |
+| categories | `categories`, `category` |
+| seo_title | `seo_title`, `meta_title`, `og_title` |
+| seo_description | `seo_description`, `meta_description`, `og_description` (falls back to `description`) |
+| canonical_url | `canonical_url`, `canonical` |
+
+Categories/tags are matched by slugified name and created when missing. `cover_image` / `og_image` media ids are not inferred from URL frontmatter. Bodies convert to Lexical `content_json` + sanitized HTML. Multipart uploads use the `files` field (max 50 docs, 2 MiB each).
 
 ## Webhooks
 

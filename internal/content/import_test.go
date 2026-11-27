@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pocketpress/pocketpress/internal/store"
 )
@@ -75,6 +76,62 @@ func TestImportMarkdownPublish(t *testing.T) {
 	}
 	if len(env.events.published) != 1 {
 		t.Fatalf("published events = %v, want 1", env.events.published)
+	}
+}
+
+func TestImportMarkdownFrontmatterAliasesAndDate(t *testing.T) {
+	env := newServiceEnv(t)
+	ctx := context.Background()
+
+	md := "---\n" +
+		"title: Aliased Import\n" +
+		"permalink: /posts/aliased-import/\n" +
+		"description: From description\n" +
+		"draft: false\n" +
+		"tag: Alpha\n" +
+		"category: Beta\n" +
+		"meta_title: SEO Title\n" +
+		"canonical: https://example.com/aliased-import\n" +
+		"date: 2024-03-01T12:00:00Z\n" +
+		"---\n\nHello body.\n"
+
+	results, err := env.svc.ImportMarkdown(ctx, []MarkdownImportItem{{
+		Filename: "aliased.md",
+		Markdown: md,
+	}}, env.authorID)
+	if err != nil {
+		t.Fatalf("ImportMarkdown() error = %v", err)
+	}
+	if results[0].Error != nil || results[0].Post == nil {
+		t.Fatalf("result = %+v", results[0])
+	}
+	p := results[0].Post
+	if p.Row.Slug != "aliased-import" {
+		t.Fatalf("slug = %q", p.Row.Slug)
+	}
+	if p.Row.Excerpt != "From description" {
+		t.Fatalf("excerpt = %q", p.Row.Excerpt)
+	}
+	if p.Row.SEOTitle != "SEO Title" {
+		t.Fatalf("seo_title = %q", p.Row.SEOTitle)
+	}
+	if p.Row.SEODescription != "From description" {
+		t.Fatalf("seo_description = %q", p.Row.SEODescription)
+	}
+	if p.Row.CanonicalURL != "https://example.com/aliased-import" {
+		t.Fatalf("canonical_url = %q", p.Row.CanonicalURL)
+	}
+	if p.Row.Status != store.PostStatusPublished {
+		t.Fatalf("status = %q", p.Row.Status)
+	}
+	if p.Row.PublishedAt == nil || p.Row.PublishedAt.UTC().Format(time.RFC3339) != "2024-03-01T12:00:00Z" {
+		t.Fatalf("published_at = %v, want 2024-03-01T12:00:00Z", p.Row.PublishedAt)
+	}
+	if len(p.Tags) != 1 || p.Tags[0].Name != "Alpha" {
+		t.Fatalf("tags = %+v", p.Tags)
+	}
+	if len(p.Categories) != 1 || p.Categories[0].Name != "Beta" {
+		t.Fatalf("categories = %+v", p.Categories)
 	}
 }
 

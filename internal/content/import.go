@@ -36,9 +36,10 @@ type MarkdownImportResult struct {
 // processed independently — one failure does not roll back earlier
 // successes.
 //
-// Status defaults to draft. Frontmatter status "published" creates a draft
-// then publishes it (so published_at and webhooks follow the normal path).
-// "scheduled" / "archived" are rejected per document.
+// Status defaults to draft. Frontmatter status "published" (or draft: false /
+// a published_at/date) creates a draft then publishes it so webhooks fire;
+// an explicit published_at/date is then written onto the post. "scheduled" /
+// "archived" are rejected per document.
 func (s *Service) ImportMarkdown(ctx context.Context, items []MarkdownImportItem, currentUserID string) ([]MarkdownImportResult, error) {
 	if len(items) == 0 {
 		return nil, &ValidationError{Fields: map[string]string{"documents": "At least one Markdown document is required."}}
@@ -78,7 +79,7 @@ func (s *Service) importOneMarkdown(ctx context.Context, item MarkdownImportItem
 		return res
 	}
 
-	status := strings.ToLower(strings.TrimSpace(doc.Meta.Status))
+	status := doc.Meta.ResolvedStatus()
 	if status == "" {
 		status = store.PostStatusDraft
 	}
@@ -161,6 +162,24 @@ func (s *Service) importOneMarkdown(ctx context.Context, item MarkdownImportItem
 			return res
 		}
 		post = published
+
+		// Honor an explicit historical publish time from frontmatter after
+		// PublishPost has set status=published and fired webhooks.
+		if doc.Meta.PublishedAt != nil {
+			at := doc.Meta.PublishedAt.UTC()
+			if err := store.SetPostStatus(ctx, s.db, post.Row.ID, store.PostStatusPublished, &at, nil); err != nil {
+				s.logger.Error("markdown import published_at", slog.String("post_id", post.Row.ID), slog.String("error", err.Error()))
+				res.Post = &post
+				res.Message = "Post published, but published_at could not be set from frontmatter."
+				return res
+			}
+			reloaded, err := s.loadPost(ctx, post.Row.ID)
+			if err != nil {
+				res.Post = &post
+				return res
+			}
+			post = reloaded
+		}
 	}
 
 	res.Post = &post
