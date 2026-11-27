@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -354,8 +355,17 @@ func TestPreviewTokenRejections(t *testing.T) {
 	// Missing token.
 	assert401("missing token", "/api/v1/preview/posts/post-a")
 
-	// Tampered signature.
-	tampered := validA[:len(validA)-1] + flipLast(validA)
+	// Tampered signature. Flip the first character of the HMAC segment —
+	// the last base64url character of a 32-byte MAC only carries 4 data
+	// bits, so A↔B there can leave the decoded signature unchanged.
+	dot := strings.LastIndexByte(validA, '.')
+	sig := []byte(validA[dot+1:])
+	if sig[0] == 'A' {
+		sig[0] = 'B'
+	} else {
+		sig[0] = 'A'
+	}
+	tampered := validA[:dot+1] + string(sig)
 	assert401("tampered token", "/api/v1/preview/posts/post-a?token="+url.QueryEscape(tampered))
 
 	// Expired token (minted 20 minutes ago, TTL 15m).
@@ -373,14 +383,6 @@ func TestPreviewTokenRejections(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound || errorCode(t, m) != "post_not_found" {
 		t.Fatalf("valid token unknown slug = %d %s, want 404 post_not_found", resp.StatusCode, errorCode(t, m))
 	}
-}
-
-// flipLast returns a single replacement character different from token's last.
-func flipLast(token string) string {
-	if token[len(token)-1] == 'A' {
-		return "B"
-	}
-	return "A"
 }
 
 // TestPreviewBypassesAPIDisabled confirms the preview endpoint still works
