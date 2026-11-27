@@ -63,7 +63,7 @@ export const load = async ({ fetch }) => {
 | Method | Endpoint |
 |---|---|
 | `pp.health()` | `GET /healthz` |
-| `pp.posts.list(params?)` | `GET /api/v1/posts` |
+| `pp.posts.list(params?)` | `GET /api/v1/posts` (supports `q` full-text search) |
 | `pp.posts.get(slug, { etag? })` | `GET /api/v1/posts/{slug}` |
 | `pp.posts.preview(slug, token)` | `GET /api/v1/preview/posts/{slug}` |
 | `pp.categories.list()` / `.get(slug)` / `.listPosts(slug, params?)` | categories |

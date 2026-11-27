@@ -101,6 +101,7 @@ paths:
         - $ref: "#/components/parameters/FeaturedFilter"
         - $ref: "#/components/parameters/AuthorFilter"
         - $ref: "#/components/parameters/SortFilter"
+        - $ref: "#/components/parameters/SearchQuery"
       responses:
         "200":
           $ref: "#/components/responses/PostList"
@@ -317,6 +318,7 @@ paths:
         - $ref: "#/components/parameters/FeaturedFilter"
         - $ref: "#/components/parameters/AuthorFilter"
         - $ref: "#/components/parameters/SortFilter"
+        - $ref: "#/components/parameters/SearchQuery"
       responses:
         "200":
           $ref: "#/components/responses/PostList"
@@ -413,6 +415,7 @@ paths:
         - $ref: "#/components/parameters/FeaturedFilter"
         - $ref: "#/components/parameters/AuthorFilter"
         - $ref: "#/components/parameters/SortFilter"
+        - $ref: "#/components/parameters/SearchQuery"
       responses:
         "200":
           $ref: "#/components/responses/PostList"
@@ -586,6 +589,20 @@ components:
         type: string
         enum: [published_at, -published_at, title, -title]
         default: -published_at
+    SearchQuery:
+      name: q
+      in: query
+      required: false
+      description: >-
+        Full-text search over post title, excerpt, and body plain text
+        (SQLite FTS5, Porter stemming, prefix tokens). When set, results
+        are ordered primarily by BM25 relevance (title weighted highest),
+        then by the requested `sort`. Whitespace-separated terms are
+        ANDed. A query that yields no usable tokens (empty or
+        punctuation-only) returns an empty page. Only publicly-visible
+        posts are searched.
+      schema:
+        type: string
 
   responses:
     PostList:

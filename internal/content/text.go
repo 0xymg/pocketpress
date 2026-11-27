@@ -24,8 +24,8 @@ var blockElements = map[string]bool{
 // Block-level boundaries (paragraphs, headings, list items, block quotes,
 // code blocks, horizontal rules) start a new paragraph; a <br> becomes a
 // single space within the current paragraph. content_text feeds excerpts and
-// future search, so exact intra-paragraph whitespace is intentionally not
-// preserved. Empty or whitespace-only input returns "".
+// the posts_fts full-text index, so exact intra-paragraph whitespace is
+// intentionally not preserved. Empty or whitespace-only input returns "".
 func HTMLToText(htmlStr string) string {
 	if strings.TrimSpace(htmlStr) == "" {
 		return ""

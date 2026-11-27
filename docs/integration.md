@@ -14,6 +14,7 @@ const pp = new PocketPress({
 });
 
 const { data: posts } = await pp.posts.list({ page: 1, featured: true });
+const { data: found } = await pp.posts.list({ q: "release notes" });
 const { data: post } = await pp.posts.get("hello-world");
 const cover = pp.resolveUrl(post?.cover_image?.url);
 
