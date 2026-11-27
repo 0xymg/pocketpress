@@ -407,6 +407,41 @@ export function duplicatePost(id: string): Promise<{ post: PostFull }> {
 	return adminFetch<{ post: PostFull }>(`/posts/${id}/duplicate`, { method: 'POST' });
 }
 
+/** One successfully imported Markdown document. */
+export interface MarkdownImportSuccess {
+	filename: string;
+	post: PostFull;
+	warning?: string;
+}
+
+/** One Markdown document that failed validation or conversion. */
+export interface MarkdownImportFailure {
+	filename: string;
+	code: string;
+	message: string;
+	details?: Record<string, string>;
+}
+
+export interface MarkdownImportResult {
+	imported: MarkdownImportSuccess[];
+	failed: MarkdownImportFailure[];
+}
+
+/**
+ * Import one or more Markdown files (.md / .markdown) as posts.
+ * Uses multipart field name "files" (same contract as the admin API).
+ */
+export function importMarkdownFiles(files: File[]): Promise<MarkdownImportResult> {
+	const formData = new FormData();
+	for (const file of files) {
+		formData.append('files', file);
+	}
+	return adminFetch<MarkdownImportResult>('/posts/import/markdown', {
+		method: 'POST',
+		body: formData
+	});
+}
+
 // ---------------------------------------------------------------------------
 // Publishing, scheduling, archiving and preview (Phase 6 — frozen contract,
 // plan sections 7 and 9). Every op returns the full updated post so the
