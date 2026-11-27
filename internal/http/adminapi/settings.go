@@ -16,17 +16,18 @@ import (
 // preview_url_template are null (not "") when unset; cors_origins is always
 // an array.
 type settingsDTO struct {
-	SiteName           string   `json:"site_name"`
-	SiteURL            string   `json:"site_url"`
-	AdminTitle         string   `json:"admin_title"`
-	Locale             string   `json:"locale"`
-	AvailableLocales   []string `json:"available_locales"`
-	Timezone           string   `json:"timezone"`
-	DefaultAuthor      *string  `json:"default_author"`
-	CORSOrigins        []string `json:"cors_origins"`
-	PublicAPIEnabled   bool     `json:"public_api_enabled"`
-	PreviewURLTemplate *string  `json:"preview_url_template"`
-	WebhookUserAgent   string   `json:"webhook_user_agent"`
+	SiteName                   string   `json:"site_name"`
+	SiteURL                    string   `json:"site_url"`
+	AdminTitle                 string   `json:"admin_title"`
+	Locale                     string   `json:"locale"`
+	AvailableLocales           []string `json:"available_locales"`
+	Timezone                   string   `json:"timezone"`
+	DefaultAuthor              *string  `json:"default_author"`
+	CORSOrigins                []string `json:"cors_origins"`
+	PublicAPIEnabled           bool     `json:"public_api_enabled"`
+	PreviewURLTemplate         *string  `json:"preview_url_template"`
+	WebhookUserAgent           string   `json:"webhook_user_agent"`
+	RequireReviewBeforePublish bool     `json:"require_review_before_publish"`
 }
 
 func toSettingsDTO(s store.Settings) settingsDTO {
@@ -39,17 +40,18 @@ func toSettingsDTO(s store.Settings) settingsDTO {
 		locales = []string{}
 	}
 	return settingsDTO{
-		SiteName:           s.SiteName,
-		SiteURL:            s.SiteURL,
-		AdminTitle:         s.AdminTitle,
-		Locale:             s.Locale,
-		AvailableLocales:   locales,
-		Timezone:           s.Timezone,
-		DefaultAuthor:      stringPtrOrNil(s.DefaultAuthor),
-		CORSOrigins:        origins,
-		PublicAPIEnabled:   s.PublicAPIEnabled,
-		PreviewURLTemplate: stringPtrOrNil(s.PreviewURLTemplate),
-		WebhookUserAgent:   s.WebhookUserAgent,
+		SiteName:                   s.SiteName,
+		SiteURL:                    s.SiteURL,
+		AdminTitle:                 s.AdminTitle,
+		Locale:                     s.Locale,
+		AvailableLocales:           locales,
+		Timezone:                   s.Timezone,
+		DefaultAuthor:              stringPtrOrNil(s.DefaultAuthor),
+		CORSOrigins:                origins,
+		PublicAPIEnabled:           s.PublicAPIEnabled,
+		PreviewURLTemplate:         stringPtrOrNil(s.PreviewURLTemplate),
+		WebhookUserAgent:           s.WebhookUserAgent,
+		RequireReviewBeforePublish: s.RequireReviewBeforePublish,
 	}
 }
 
@@ -187,6 +189,15 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 			fields["public_api_enabled"] = "Public API enabled must be a boolean."
 		} else {
 			s.PublicAPIEnabled = b
+		}
+	}
+
+	if v, ok := raw["require_review_before_publish"]; ok {
+		var b bool
+		if err := json.Unmarshal(v, &b); err != nil {
+			fields["require_review_before_publish"] = "Require review before publish must be a boolean."
+		} else {
+			s.RequireReviewBeforePublish = b
 		}
 	}
 

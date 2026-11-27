@@ -11,17 +11,18 @@ import (
 // Settings is the single row of the settings table (singleton: id is
 // always 1).
 type Settings struct {
-	SiteName           string
-	SiteURL            string
-	AdminTitle         string
-	Locale             string
-	AvailableLocales   []string // BCP 47 tags the site publishes content in
-	Timezone           string
-	DefaultAuthor      string // user ID, "" means unset (NULL in storage)
-	CORSOrigins        []string
-	PublicAPIEnabled   bool
-	PreviewURLTemplate string
-	WebhookUserAgent   string
+	SiteName                   string
+	SiteURL                    string
+	AdminTitle                 string
+	Locale                     string
+	AvailableLocales           []string // BCP 47 tags the site publishes content in
+	Timezone                   string
+	DefaultAuthor              string // user ID, "" means unset (NULL in storage)
+	CORSOrigins                []string
+	PublicAPIEnabled           bool
+	PreviewURLTemplate         string
+	WebhookUserAgent           string
+	RequireReviewBeforePublish bool
 }
 
 // settingsID is the fixed primary key of the singleton settings row.
@@ -54,11 +55,11 @@ func CreateSettings(ctx context.Context, db *sql.DB, s Settings) (Settings, erro
 		INSERT INTO settings (
 			id, site_name, site_url, admin_title, locale, available_locales, timezone,
 			default_author, cors_origins, public_api_enabled,
-			preview_url_template, webhook_user_agent
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			preview_url_template, webhook_user_agent, require_review_before_publish
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		settingsID, s.SiteName, s.SiteURL, s.AdminTitle, s.Locale, availableLocales, s.Timezone,
 		nullString(s.DefaultAuthor), corsOrigins, boolToInt(s.PublicAPIEnabled),
-		nullString(s.PreviewURLTemplate), s.WebhookUserAgent,
+		nullString(s.PreviewURLTemplate), s.WebhookUserAgent, boolToInt(s.RequireReviewBeforePublish),
 	)
 	if err != nil {
 		return Settings{}, fmt.Errorf("insert settings: %w", err)
@@ -73,23 +74,25 @@ func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
 	row := db.QueryRowContext(ctx, `
 		SELECT site_name, site_url, admin_title, locale, available_locales, timezone,
 			default_author, cors_origins, public_api_enabled,
-			preview_url_template, webhook_user_agent
+			preview_url_template, webhook_user_agent, require_review_before_publish
 		FROM settings
 		WHERE id = ?`,
 		settingsID,
 	)
 
 	var (
-		s                  Settings
-		availableLocales   string
-		defaultAuthor      sql.NullString
-		corsOrigins        string
-		publicAPIEnabled   int
-		previewURLTemplate sql.NullString
+		s                          Settings
+		availableLocales           string
+		defaultAuthor              sql.NullString
+		corsOrigins                string
+		publicAPIEnabled           int
+		previewURLTemplate         sql.NullString
+		requireReviewBeforePublish int
 	)
 
 	err := row.Scan(&s.SiteName, &s.SiteURL, &s.AdminTitle, &s.Locale, &availableLocales, &s.Timezone,
 		&defaultAuthor, &corsOrigins, &publicAPIEnabled, &previewURLTemplate, &s.WebhookUserAgent,
+		&requireReviewBeforePublish,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Settings{}, ErrNotFound
@@ -101,6 +104,7 @@ func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
 	s.DefaultAuthor = stringOrEmpty(defaultAuthor)
 	s.PublicAPIEnabled = publicAPIEnabled != 0
 	s.PreviewURLTemplate = stringOrEmpty(previewURLTemplate)
+	s.RequireReviewBeforePublish = requireReviewBeforePublish != 0
 
 	if s.AvailableLocales, err = unmarshalStringList(availableLocales); err != nil {
 		return Settings{}, fmt.Errorf("unmarshal available_locales: %w", err)
@@ -128,11 +132,12 @@ func UpdateSettings(ctx context.Context, db *sql.DB, s Settings) error {
 		UPDATE settings SET
 			site_name = ?, site_url = ?, admin_title = ?, locale = ?, available_locales = ?, timezone = ?,
 			default_author = ?, cors_origins = ?, public_api_enabled = ?,
-			preview_url_template = ?, webhook_user_agent = ?
+			preview_url_template = ?, webhook_user_agent = ?, require_review_before_publish = ?
 		WHERE id = ?`,
 		s.SiteName, s.SiteURL, s.AdminTitle, s.Locale, availableLocales, s.Timezone,
 		nullString(s.DefaultAuthor), corsOrigins, boolToInt(s.PublicAPIEnabled),
-		nullString(s.PreviewURLTemplate), s.WebhookUserAgent, settingsID,
+		nullString(s.PreviewURLTemplate), s.WebhookUserAgent, boolToInt(s.RequireReviewBeforePublish),
+		settingsID,
 	)
 	if err != nil {
 		return fmt.Errorf("update settings: %w", err)

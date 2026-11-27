@@ -129,6 +129,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /api/admin/v1/posts/{id}/archive", user(h.archivePost))
 	mux.Handle("POST /api/admin/v1/posts/{id}/preview-token", user(h.previewToken))
 
+	// Draft review workflow (v0.3): submit / approve / request-changes / withdraw.
+	mux.Handle("POST /api/admin/v1/posts/{id}/submit-review", user(h.submitReview))
+	mux.Handle("POST /api/admin/v1/posts/{id}/approve-review", user(h.approveReview))
+	mux.Handle("POST /api/admin/v1/posts/{id}/request-changes", user(h.requestChanges))
+	mux.Handle("POST /api/admin/v1/posts/{id}/withdraw-review", user(h.withdrawReview))
+
 	// Settings: any authenticated user may read (editors need available_locales
 	// for the post editor); only owners may PATCH.
 	mux.Handle("GET /api/admin/v1/settings", requireUser(http.HandlerFunc(h.getSettings)))

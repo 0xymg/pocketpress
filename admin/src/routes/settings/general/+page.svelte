@@ -40,6 +40,7 @@
 	let previewUrlTemplate = $state('');
 	let corsOriginsText = $state('');
 	let publicApiEnabled = $state(false);
+	let requireReviewBeforePublish = $state(false);
 
 	let saving = $state(false);
 	let saveError = $state('');
@@ -57,6 +58,7 @@
 		previewUrlTemplate = settings.preview_url_template ?? '';
 		corsOriginsText = settings.cors_origins.join('\n');
 		publicApiEnabled = settings.public_api_enabled;
+		requireReviewBeforePublish = settings.require_review_before_publish;
 	}
 
 	async function loadSettings() {
@@ -111,6 +113,10 @@
 
 		if (publicApiEnabled !== baseline.public_api_enabled) {
 			payload.public_api_enabled = publicApiEnabled;
+		}
+
+		if (requireReviewBeforePublish !== baseline.require_review_before_publish) {
+			payload.require_review_before_publish = requireReviewBeforePublish;
 		}
 
 		return payload;
@@ -309,6 +315,23 @@
 							</label>
 							{#if fieldErrors.public_api_enabled}
 								<p class="text-xs text-destructive">{fieldErrors.public_api_enabled}</p>
+							{/if}
+						</div>
+
+						<div class="space-y-1.5">
+							<label class="flex items-center gap-2 text-sm text-stone-700">
+								<input
+									id="settings-require-review"
+									type="checkbox"
+									bind:checked={requireReviewBeforePublish}
+								/>
+								Require review before publish
+							</label>
+							<p class="text-xs text-stone-500">
+								When enabled, drafts must be approved before Publish or Schedule.
+							</p>
+							{#if fieldErrors.require_review_before_publish}
+								<p class="text-xs text-destructive">{fieldErrors.require_review_before_publish}</p>
 							{/if}
 						</div>
 

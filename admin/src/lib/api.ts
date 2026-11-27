@@ -254,6 +254,8 @@ export interface PostTaxonomyRef {
 
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'archived';
 
+export type ReviewStatus = 'none' | 'pending' | 'approved' | 'changes_requested';
+
 /** Media reference embedded on a post's cover_image/og_image (Phase 4 media contract). */
 export interface PostMediaRef {
 	id: string;
@@ -285,6 +287,11 @@ export interface PostSummary {
 	og_image: PostMediaRef | null;
 	scheduled_for: string | null;
 	published_at: string | null;
+	review_status: ReviewStatus;
+	review_note: string;
+	reviewed_by: string | null;
+	reviewed_at: string | null;
+	submitted_for_review_at: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -319,6 +326,7 @@ export interface PostListParams {
 	status?: PostStatus;
 	category?: string;
 	locale?: string;
+	review_status?: ReviewStatus;
 	search?: string;
 	/** Admin sort allowlist: -updated_at (default) | updated_at | title | -title. */
 	sort?: string;
@@ -420,6 +428,7 @@ export function listPosts(params: PostListParams = {}): Promise<PostListResult> 
 		status: params.status,
 		category: params.category,
 		locale: params.locale,
+		review_status: params.review_status,
 		search: params.search,
 		sort: params.sort ?? '-updated_at'
 	});
@@ -563,6 +572,32 @@ export function schedulePost(
 }
 
 // ---------------------------------------------------------------------------
+// Draft review workflow (v0.3) — submit / approve / request-changes / withdraw.
+// ---------------------------------------------------------------------------
+
+export function submitReview(id: string): Promise<{ post: PostFull }> {
+	return adminFetch<{ post: PostFull }>(`/posts/${id}/submit-review`, { method: 'POST' });
+}
+
+export function approveReview(id: string): Promise<{ post: PostFull }> {
+	return adminFetch<{ post: PostFull }>(`/posts/${id}/approve-review`, { method: 'POST' });
+}
+
+export function requestChanges(
+	id: string,
+	payload: { note: string }
+): Promise<{ post: PostFull }> {
+	return adminFetch<{ post: PostFull }>(`/posts/${id}/request-changes`, {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function withdrawReview(id: string): Promise<{ post: PostFull }> {
+	return adminFetch<{ post: PostFull }>(`/posts/${id}/withdraw-review`, { method: 'POST' });
+}
+
+// ---------------------------------------------------------------------------
 // Scheduling calendar (v0.3) — month view of scheduled + published posts.
 // ---------------------------------------------------------------------------
 
@@ -628,6 +663,7 @@ export interface Settings {
 	public_api_enabled: boolean;
 	preview_url_template: string | null;
 	webhook_user_agent: string;
+	require_review_before_publish: boolean;
 }
 
 /** PATCH is partial — send only the fields being changed. */

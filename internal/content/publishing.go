@@ -34,6 +34,9 @@ func (s *Service) PublishPost(ctx context.Context, id string) (Post, error) {
 		// Already live: keep published_at, change nothing, fire nothing.
 		return s.loadPost(ctx, id)
 	}
+	if err := s.requireReviewApproved(ctx, existing.ReviewStatus); err != nil {
+		return Post{}, err
+	}
 
 	publishedAt := existing.PublishedAt
 	if publishedAt == nil {
@@ -101,6 +104,13 @@ func (s *Service) SchedulePost(ctx context.Context, id string, scheduledFor time
 	case store.PostStatusDraft, store.PostStatusScheduled, store.PostStatusArchived:
 	default:
 		return Post{}, &ValidationError{Fields: map[string]string{"status": scheduleNotAllowedMessage}}
+	}
+	// Re-scheduling an already-scheduled post keeps the prior approval gate
+	// result; only first-time (or draft/archived) transitions check review.
+	if existing.Status != store.PostStatusScheduled {
+		if err := s.requireReviewApproved(ctx, existing.ReviewStatus); err != nil {
+			return Post{}, err
+		}
 	}
 
 	scheduledFor = scheduledFor.UTC()

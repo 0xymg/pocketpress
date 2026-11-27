@@ -12,6 +12,7 @@ export type NavKey =
 	| 'dashboard'
 	| 'posts'
 	| 'calendar'
+	| 'reviews'
 	| 'categories'
 	| 'tags'
 	| 'media'
@@ -48,6 +49,7 @@ export const NAV_GROUPS: NavGroup[] = [
 			{ key: 'dashboard', href: '/', label: 'Dashboard' },
 			{ key: 'posts', href: '/posts', label: 'Posts' },
 			{ key: 'calendar', href: '/calendar', label: 'Calendar' },
+			{ key: 'reviews', href: '/reviews', label: 'Reviews' },
 			{ key: 'categories', href: '/categories', label: 'Categories' },
 			{ key: 'tags', href: '/tags', label: 'Tags' },
 			{ key: 'media', href: '/media', label: 'Media' },
@@ -75,6 +77,7 @@ export function activeKeyFromPath(pathname: string): NavKey | null {
 	if (pathname === '/') return 'dashboard';
 	if (pathname.startsWith('/posts')) return 'posts';
 	if (pathname.startsWith('/calendar')) return 'calendar';
+	if (pathname.startsWith('/reviews')) return 'reviews';
 	if (pathname.startsWith('/categories')) return 'categories';
 	if (pathname.startsWith('/tags')) return 'tags';
 	if (pathname.startsWith('/media')) return 'media';

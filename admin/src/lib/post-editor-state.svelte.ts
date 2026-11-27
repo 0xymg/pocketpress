@@ -1,5 +1,5 @@
 import { slugify } from './slugify';
-import type { PostFull, PostMediaRef, PostPayload, PostStatus } from './api';
+import type { PostFull, PostMediaRef, PostPayload, PostStatus, ReviewStatus } from './api';
 
 export interface PostFormSnapshot {
 	title: string;
@@ -81,6 +81,11 @@ export class PostEditorState {
 	publishedAt = $state<string | null>(null);
 	/** The post's scheduled publish time while status is "scheduled". Read-only here — only the schedule op changes it. */
 	scheduledFor = $state<string | null>(null);
+	/** Editorial review state (v0.3). Read-only here — only review ops change it. */
+	reviewStatus = $state<ReviewStatus>('none');
+	reviewNote = $state('');
+	reviewedAt = $state<string | null>(null);
+	submittedForReviewAt = $state<string | null>(null);
 	/** Server timestamps, shown as read-only meta in the editor sidebar. Not part of the dirty snapshot. */
 	createdAt = $state<string | null>(null);
 	updatedAt = $state<string | null>(null);
@@ -183,6 +188,10 @@ export class PostEditorState {
 		this.status = 'draft';
 		this.publishedAt = null;
 		this.scheduledFor = null;
+		this.reviewStatus = 'none';
+		this.reviewNote = '';
+		this.reviewedAt = null;
+		this.submittedForReviewAt = null;
 		this.createdAt = null;
 		this.updatedAt = null;
 		this.authorId = defaultAuthorId;
@@ -221,6 +230,10 @@ export class PostEditorState {
 		this.status = post.status;
 		this.publishedAt = post.published_at;
 		this.scheduledFor = post.scheduled_for;
+		this.reviewStatus = post.review_status ?? 'none';
+		this.reviewNote = post.review_note ?? '';
+		this.reviewedAt = post.reviewed_at;
+		this.submittedForReviewAt = post.submitted_for_review_at;
 		this.createdAt = post.created_at;
 		this.updatedAt = post.updated_at;
 		this.authorId = post.author.id;
