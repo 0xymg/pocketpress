@@ -78,6 +78,7 @@ type PostCreateInput struct {
 	OGImage        string // media id; "" = no OG image
 	Locale         string // blank → site default locale
 	TranslateOf    string // optional post id to join as a translation of
+	Metadata       string // JSON object; blank → "{}"
 	CurrentUserID  string
 }
 
@@ -114,7 +115,10 @@ type PostUpdateInput struct {
 	Locale         *string
 	// TranslateOf: nil = leave group unchanged; pointer to "" = unlink;
 	// pointer to a post id = join that post's translation group.
-	TranslateOf   *string
+	TranslateOf *string
+	// Metadata: nil = leave unchanged; non-nil raw JSON object replaces
+	// the stored object (use "{}" to clear).
+	Metadata      *string
 	CurrentUserID string
 }
 

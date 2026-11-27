@@ -34,6 +34,7 @@ const samplePost: Post = {
     canonical_url: "https://example.com/hello",
     og_image_url: null,
   },
+  metadata: {},
   published_at: "2026-08-02T12:00:00Z",
   updated_at: "2026-08-02T12:00:00Z",
 };

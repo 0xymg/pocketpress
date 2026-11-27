@@ -50,7 +50,7 @@
 		type PostFull,
 		type Tag
 	} from '$lib/api';
-	import { PostEditorState } from '$lib/post-editor-state.svelte';
+	import { parseMetadataText, PostEditorState } from '$lib/post-editor-state.svelte';
 	import { mediaPicker } from '$lib/media-picker-state.svelte';
 	import MediaPicker from '$lib/components/media/MediaPicker.svelte';
 	import LexicalEditor, { type InsertedImage } from './LexicalEditor.svelte';
@@ -374,7 +374,8 @@
 			featured: formState.featured,
 			seoTitle: formState.seoTitle,
 			seoDescription: formState.seoDescription,
-			canonicalUrl: formState.canonicalUrl
+			canonicalUrl: formState.canonicalUrl,
+			metadataText: formState.metadataText
 		};
 	}
 
@@ -420,6 +421,7 @@
 		formState.seoTitle = draft.seoTitle;
 		formState.seoDescription = draft.seoDescription;
 		formState.canonicalUrl = draft.canonicalUrl;
+		formState.metadataText = draft.metadataText ?? '{}';
 		formState.contentJson = draft.contentJson;
 		formState.contentHtml = draft.contentHtml;
 		formState.slugTouched = true;
@@ -580,6 +582,12 @@
 	async function handleSave() {
 		saveError = '';
 		fieldErrors = {};
+		const metaParsed = parseMetadataText(formState.metadataText);
+		if (!metaParsed.ok) {
+			fieldErrors = { metadata: metaParsed.error };
+			saveError = metaParsed.error;
+			return;
+		}
 		saving = true;
 		try {
 			const payload = formState.toPayload();
@@ -1235,6 +1243,28 @@
 						/>
 						{#if fieldErrors.canonical_url}
 							<p class="text-xs text-destructive">{fieldErrors.canonical_url}</p>
+						{/if}
+					</div>
+				</div>
+
+				<div class="space-y-4 border-t border-stone-100 pt-6">
+					<span class="text-[13px] text-stone-500">Custom metadata</span>
+					<div class="space-y-1.5">
+						<Label for="metadata">JSON object</Label>
+						<Textarea
+							id="metadata"
+							class="font-mono text-xs"
+							rows={6}
+							bind:value={formState.metadataText}
+							aria-invalid={!!fieldErrors.metadata}
+							placeholder={'{\n  "hero": "launch"\n}'}
+						/>
+						<p class="text-xs text-stone-400">
+							Exposed on the public API as <code class="text-[11px]">metadata</code>. Must be a
+							JSON object.
+						</p>
+						{#if fieldErrors.metadata}
+							<p class="text-xs text-destructive">{fieldErrors.metadata}</p>
 						{/if}
 					</div>
 				</div>

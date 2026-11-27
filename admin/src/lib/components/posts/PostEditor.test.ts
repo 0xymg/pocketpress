@@ -78,7 +78,8 @@ const EXISTING_POST = {
 	seo_description: '',
 	canonical_url: '',
 	translation_group: null,
-	translations: []
+	translations: [],
+	metadata: {}
 };
 
 /** Same document, but scheduled — used for the "scheduled" action-bar and chip tests. */

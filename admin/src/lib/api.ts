@@ -306,6 +306,8 @@ export interface PostFull extends PostSummary {
 	canonical_url: string;
 	translation_group: string | null;
 	translations: PostTranslationRef[];
+	/** Free-form JSON object exposed on the public API as `metadata`. */
+	metadata: Record<string, unknown>;
 }
 
 export interface PostListMeta {
@@ -358,6 +360,8 @@ export interface PostPayload {
 	locale?: string;
 	/** Post id to join as a translation of; "" unlinks on update. */
 	translate_of?: string;
+	/** Free-form JSON object; omit to leave unchanged on PATCH; `{}` clears. */
+	metadata?: Record<string, unknown>;
 }
 
 function buildQuery(params: Record<string, string | number | undefined>): string {

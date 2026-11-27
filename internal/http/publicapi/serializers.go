@@ -1,6 +1,7 @@
 package publicapi
 
 import (
+	"encoding/json"
 	"net/url"
 	"time"
 
@@ -77,6 +78,7 @@ type postDTO struct {
 	Locale       string           `json:"locale"`
 	Translations []translationDTO `json:"translations"`
 	SEO          seoDTO           `json:"seo"`
+	Metadata     json.RawMessage  `json:"metadata"`
 	PublishedAt  *time.Time       `json:"published_at"`
 	UpdatedAt    time.Time        `json:"updated_at"`
 }
@@ -112,9 +114,17 @@ func toPostDTO(p content.Post) postDTO {
 			CanonicalURL: stringOrNil(p.Row.CanonicalURL),
 			OGImageURL:   mediaURLOrNil(p.OGImage),
 		},
+		Metadata:    metadataRaw(p.Row.Metadata),
 		PublishedAt: p.Row.PublishedAt,
 		UpdatedAt:   p.Row.UpdatedAt,
 	}
+}
+
+func metadataRaw(s string) json.RawMessage {
+	if s == "" {
+		return json.RawMessage("{}")
+	}
+	return json.RawMessage(s)
 }
 
 func toPublicTranslations(refs []store.TranslationRef) []translationDTO {

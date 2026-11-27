@@ -25,7 +25,7 @@ func ListCalendarPosts(ctx context.Context, db DBTX, from, to time.Time) ([]Post
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, locale, translation_group,
+			canonical_url, og_image, locale, translation_group, metadata,
 			scheduled_for, published_at,
 			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
 			created_at, updated_at

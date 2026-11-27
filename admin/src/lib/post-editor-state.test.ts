@@ -32,6 +32,7 @@ function fakePost(overrides: Partial<PostFull> = {}): PostFull {
 		canonical_url: '',
 		translation_group: null,
 		translations: [],
+		metadata: {},
 		...overrides
 	};
 }
@@ -164,6 +165,7 @@ describe('PostEditorState — payload building', () => {
 			seo_title: '',
 			seo_description: '',
 			canonical_url: '',
+			metadata: {},
 			cover_image: '',
 			og_image: ''
 		});
