@@ -85,6 +85,16 @@ GET /api/v1/feed.atom
 
 Each feed returns up to 20 newest posts. Item/entry links use a post's SEO `canonical_url` when set; otherwise `{site_url}/{slug}`.
 
+## Sitemap
+
+A Sitemap 0.9 document lists the site homepage and every publicly-visible post:
+
+```text
+GET /api/v1/sitemap.xml
+```
+
+Post `<loc>` values use `canonical_url` when set; otherwise `{site_url}/{slug}`. Also gated by `public_api_enabled`.
+
 ## CORS setup
 
 Cross-origin requests require explicit allowlist configuration. In the PocketPress admin, go to **Settings → General** and add your frontend URL to **CORS Origins**, or set `PP_CORS_ORIGINS` at startup:
