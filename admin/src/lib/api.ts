@@ -442,6 +442,52 @@ export function importMarkdownFiles(files: File[]): Promise<MarkdownImportResult
 	});
 }
 
+/** One successfully imported Ghost/WordPress post. */
+export interface ExportImportSuccess {
+	source_key: string;
+	post: PostFull;
+	warning?: string;
+}
+
+/** One Ghost/WordPress post that failed validation or conversion. */
+export interface ExportImportFailure {
+	source_key: string;
+	code: string;
+	message: string;
+	details?: Record<string, string>;
+}
+
+export interface ExportImportResult {
+	imported: ExportImportSuccess[];
+	failed: ExportImportFailure[];
+}
+
+/**
+ * Import posts from a Ghost content export JSON file.
+ * Uses multipart field name "file".
+ */
+export function importGhostExport(file: File): Promise<ExportImportResult> {
+	const formData = new FormData();
+	formData.append('file', file);
+	return adminFetch<ExportImportResult>('/posts/import/ghost', {
+		method: 'POST',
+		body: formData
+	});
+}
+
+/**
+ * Import posts from a WordPress WXR (.xml) export file.
+ * Uses multipart field name "file".
+ */
+export function importWordPressExport(file: File): Promise<ExportImportResult> {
+	const formData = new FormData();
+	formData.append('file', file);
+	return adminFetch<ExportImportResult>('/posts/import/wordpress', {
+		method: 'POST',
+		body: formData
+	});
+}
+
 // ---------------------------------------------------------------------------
 // Publishing, scheduling, archiving and preview (Phase 6 — frozen contract,
 // plan sections 7 and 9). Every op returns the full updated post so the

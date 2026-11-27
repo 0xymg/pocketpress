@@ -11,10 +11,14 @@
 		ApiError,
 		deletePost,
 		duplicatePost,
+		importGhostExport,
 		importMarkdownFiles,
+		importWordPressExport,
 		listCategories,
 		listPosts,
 		type Category,
+		type ExportImportResult,
+		type MarkdownImportResult,
 		type PostListMeta,
 		type PostStatus,
 		type PostSummary
@@ -64,7 +68,9 @@
 	let bulkError = $state('');
 	let selectAllEl = $state<HTMLInputElement | undefined>();
 
-	let importInputEl = $state<HTMLInputElement | undefined>();
+	let markdownImportInputEl = $state<HTMLInputElement | undefined>();
+	let ghostImportInputEl = $state<HTMLInputElement | undefined>();
+	let wordpressImportInputEl = $state<HTMLInputElement | undefined>();
 	let importing = $state(false);
 	let importMessage = $state('');
 	let importError = $state('');
@@ -214,10 +220,34 @@
 		}
 	}
 
-	function openMarkdownImport() {
+	function openImport(kind: 'markdown' | 'ghost' | 'wordpress') {
 		importMessage = '';
 		importError = '';
-		importInputEl?.click();
+		if (kind === 'markdown') markdownImportInputEl?.click();
+		else if (kind === 'ghost') ghostImportInputEl?.click();
+		else wordpressImportInputEl?.click();
+	}
+
+	function applyImportResult(
+		label: string,
+		result: MarkdownImportResult | ExportImportResult,
+		failKey: (row: { filename?: string; source_key?: string; message: string }) => string
+	) {
+		const ok = result.imported?.length ?? 0;
+		const fail = result.failed?.length ?? 0;
+		if (fail === 0) {
+			importMessage = ok === 1 ? `Imported 1 post from ${label}.` : `Imported ${ok} posts from ${label}.`;
+			return ok;
+		}
+		if (ok === 0) {
+			const first = result.failed[0] as { filename?: string; source_key?: string; message: string };
+			importError = first?.message ? `Import failed: ${first.message}` : 'Import failed.';
+			return ok;
+		}
+		importMessage = `Imported ${ok} post${ok === 1 ? '' : 's'}; ${fail} failed.`;
+		const first = result.failed[0] as { filename?: string; source_key?: string; message: string };
+		importError = failKey(first);
+		return ok;
 	}
 
 	async function handleMarkdownImport(event: Event) {
@@ -231,25 +261,54 @@
 		importError = '';
 		try {
 			const result = await importMarkdownFiles(files);
-			const ok = result.imported?.length ?? 0;
-			const fail = result.failed?.length ?? 0;
-			if (ok > 0) {
-				await loadPosts();
-			}
-			if (fail === 0) {
-				importMessage = ok === 1 ? 'Imported 1 post from Markdown.' : `Imported ${ok} posts from Markdown.`;
-			} else if (ok === 0) {
-				const first = result.failed[0];
-				importError = first?.message
-					? `Import failed: ${first.message}`
-					: 'Import failed.';
-			} else {
-				importMessage = `Imported ${ok} post${ok === 1 ? '' : 's'}; ${fail} failed.`;
-				const first = result.failed[0];
-				if (first?.filename) {
-					importError = `${first.filename}: ${first.message}`;
-				}
-			}
+			const ok = applyImportResult('Markdown', result, (first) =>
+				first.filename ? `${first.filename}: ${first.message}` : first.message
+			);
+			if (ok > 0) await loadPosts();
+		} catch (err) {
+			importError = describeError(err);
+		} finally {
+			importing = false;
+		}
+	}
+
+	async function handleGhostImport(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+
+		importing = true;
+		importMessage = '';
+		importError = '';
+		try {
+			const result = await importGhostExport(file);
+			const ok = applyImportResult('Ghost', result, (first) =>
+				first.source_key ? `${first.source_key}: ${first.message}` : first.message
+			);
+			if (ok > 0) await loadPosts();
+		} catch (err) {
+			importError = describeError(err);
+		} finally {
+			importing = false;
+		}
+	}
+
+	async function handleWordPressImport(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+
+		importing = true;
+		importMessage = '';
+		importError = '';
+		try {
+			const result = await importWordPressExport(file);
+			const ok = applyImportResult('WordPress', result, (first) =>
+				first.source_key ? `${first.source_key}: ${first.message}` : first.message
+			);
+			if (ok > 0) await loadPosts();
 		} catch (err) {
 			importError = describeError(err);
 		} finally {
@@ -331,12 +390,30 @@
 				variant="outline"
 				size="sm"
 				disabled={importing}
-				onclick={openMarkdownImport}
+				onclick={() => openImport('markdown')}
 			>
 				{importing ? 'Importing…' : 'Import Markdown'}
 			</Button>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				disabled={importing}
+				onclick={() => openImport('ghost')}
+			>
+				Import Ghost
+			</Button>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				disabled={importing}
+				onclick={() => openImport('wordpress')}
+			>
+				Import WordPress
+			</Button>
 			<input
-				bind:this={importInputEl}
+				bind:this={markdownImportInputEl}
 				type="file"
 				accept=".md,.markdown,text/markdown"
 				multiple
@@ -344,6 +421,24 @@
 				aria-hidden="true"
 				tabindex="-1"
 				onchange={handleMarkdownImport}
+			/>
+			<input
+				bind:this={ghostImportInputEl}
+				type="file"
+				accept=".json,application/json"
+				class="hidden"
+				aria-hidden="true"
+				tabindex="-1"
+				onchange={handleGhostImport}
+			/>
+			<input
+				bind:this={wordpressImportInputEl}
+				type="file"
+				accept=".xml,.wxr,text/xml,application/xml"
+				class="hidden"
+				aria-hidden="true"
+				tabindex="-1"
+				onchange={handleWordPressImport}
 			/>
 		</div>
 		<p class="mt-2 text-[13px] text-stone-500">Everything you've written, drafts included.</p>
