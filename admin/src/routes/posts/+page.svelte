@@ -7,8 +7,11 @@
 	 */
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Popup } from '$lib/components/ui/popup/index.js';
+	import { goto } from '$app/navigation';
 	import {
 		ApiError,
+		createPostFromTemplate,
+		createTemplate,
 		deletePost,
 		duplicatePost,
 		importGhostExport,
@@ -16,12 +19,14 @@
 		importWordPressExport,
 		listCategories,
 		listPosts,
+		listTemplates,
 		type Category,
 		type ExportImportResult,
 		type MarkdownImportResult,
 		type PostListMeta,
 		type PostStatus,
-		type PostSummary
+		type PostSummary,
+		type PostTemplate
 	} from '$lib/api';
 
 	const SEARCH_DEBOUNCE_MS = 300;
@@ -74,6 +79,14 @@
 	let importing = $state(false);
 	let importMessage = $state('');
 	let importError = $state('');
+
+	let templates = $state<PostTemplate[]>([]);
+	let templatesLoaded = $state(false);
+	let usingTemplateId = $state<string | null>(null);
+	let templateActionError = $state('');
+	let saveAsTemplatePostId = $state<string | null>(null);
+	let saveAsTemplateName = $state('');
+	let savingAsTemplate = $state(false);
 
 	const allSelected = $derived(posts.length > 0 && posts.every((p) => selectedIds.has(p.id)));
 	const someSelected = $derived(posts.some((p) => selectedIds.has(p.id)));
@@ -329,6 +342,55 @@
 		}
 	}
 
+	async function ensureTemplates() {
+		if (templatesLoaded) return;
+		try {
+			const { templates: fetched } = await listTemplates();
+			templates = fetched;
+			templatesLoaded = true;
+		} catch (err) {
+			templateActionError = describeError(err);
+		}
+	}
+
+	async function handleUseTemplate(template: PostTemplate) {
+		templateActionError = '';
+		usingTemplateId = template.id;
+		try {
+			const { post } = await createPostFromTemplate(template.id);
+			await goto(`/posts/${post.id}`);
+		} catch (err) {
+			templateActionError = describeError(err);
+			usingTemplateId = null;
+		}
+	}
+
+	function openSaveAsTemplate(post: PostSummary) {
+		saveAsTemplatePostId = post.id;
+		saveAsTemplateName = `${post.title || 'Untitled'} template`;
+		rowError = { ...rowError, [post.id]: '' };
+	}
+
+	async function handleSaveAsTemplate(post: PostSummary) {
+		const name = saveAsTemplateName.trim();
+		if (!name) {
+			rowError = { ...rowError, [post.id]: 'Template name is required.' };
+			return;
+		}
+		savingAsTemplate = true;
+		rowError = { ...rowError, [post.id]: '' };
+		try {
+			await createTemplate({ name, from_post: post.id });
+			templatesLoaded = false;
+			saveAsTemplatePostId = null;
+			saveAsTemplateName = '';
+		} catch (err) {
+			rowError = { ...rowError, [post.id]: describeError(err) };
+		} finally {
+			savingAsTemplate = false;
+		}
+	}
+
 	async function handleDelete(post: PostSummary) {
 		rowError = { ...rowError, [post.id]: '' };
 		rowBusy = { ...rowBusy, [post.id]: true };
@@ -385,6 +447,54 @@
 		<div class="flex flex-wrap items-center gap-3">
 			<h1 class="text-[32px] font-medium leading-9 text-stone-900">Posts</h1>
 			<Button href="/posts/new" size="sm">New post</Button>
+			<Popup align="left">
+				{#snippet trigger(toggle, open)}
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						aria-haspopup="menu"
+						aria-expanded={open}
+						onclick={() => {
+							void ensureTemplates();
+							toggle();
+						}}
+					>
+						New from template
+					</Button>
+				{/snippet}
+				{#snippet children(close)}
+					{#if !templatesLoaded && !templateActionError}
+						<p class="px-3 py-2 text-xs text-stone-400">Loading templates…</p>
+					{:else if templates.length === 0}
+						<p class="px-3 py-2 text-xs text-stone-500">No templates yet.</p>
+						<a
+							href="/templates"
+							class="block px-3 py-2 text-xs text-stone-800 underline underline-offset-2"
+							onclick={() => close()}
+						>
+							Manage templates
+						</a>
+					{:else}
+						{#each templates as template (template.id)}
+							<button
+								type="button"
+								class="block w-full px-3 py-2 text-left text-sm text-stone-800 hover:bg-stone-50 disabled:opacity-50"
+								disabled={usingTemplateId === template.id}
+								onclick={() => {
+									close();
+									void handleUseTemplate(template);
+								}}
+							>
+								{usingTemplateId === template.id ? 'Creating…' : template.name}
+							</button>
+						{/each}
+					{/if}
+					{#if templateActionError}
+						<p class="px-3 py-2 text-xs text-destructive">{templateActionError}</p>
+					{/if}
+				{/snippet}
+			</Popup>
 			<Button
 				type="button"
 				variant="outline"
@@ -638,15 +748,46 @@
 							<td class="px-3 py-3 text-stone-500 group-hover:bg-stone-50">{formatDate(post.updated_at)}</td>
 						{/if}
 						<td class="rounded-r-[3px] px-3 py-3 pr-4 group-hover:bg-stone-50">
-							<div class="flex items-center gap-2">
+							<div class="flex flex-wrap items-center gap-2">
 								<Button
 									variant="outline"
 									size="sm"
-									disabled={rowBusy[post.id]}
+									disabled={rowBusy[post.id] || savingAsTemplate}
 									onclick={() => handleDuplicate(post)}
 								>
 									Duplicate
 								</Button>
+								{#if saveAsTemplatePostId === post.id}
+									<input
+										class="h-8 w-40 rounded-[3px] border border-stone-200 px-2 text-[12px] outline-none"
+										aria-label="Template name"
+										bind:value={saveAsTemplateName}
+									/>
+									<Button
+										size="sm"
+										disabled={savingAsTemplate}
+										onclick={() => handleSaveAsTemplate(post)}
+									>
+										{savingAsTemplate ? 'Saving…' : 'Save template'}
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={savingAsTemplate}
+										onclick={() => (saveAsTemplatePostId = null)}
+									>
+										Cancel
+									</Button>
+								{:else}
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={rowBusy[post.id] || savingAsTemplate}
+										onclick={() => openSaveAsTemplate(post)}
+									>
+										Save as template
+									</Button>
+								{/if}
 								{#if confirmDeleteId === post.id}
 									<Button
 										variant="destructive"

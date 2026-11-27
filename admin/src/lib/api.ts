@@ -461,6 +461,100 @@ export function duplicatePost(id: string): Promise<{ post: PostFull }> {
 	return adminFetch<{ post: PostFull }>(`/posts/${id}/duplicate`, { method: 'POST' });
 }
 
+/** Reusable content duplication template (v0.3). */
+export interface PostTemplate {
+	id: string;
+	name: string;
+	description: string;
+	title: string;
+	excerpt: string;
+	content_json: string;
+	content_html: string;
+	cover_image: PostMediaRef | null;
+	categories: PostTaxonomyRef[];
+	tags: PostTaxonomyRef[];
+	featured: boolean;
+	seo_title: string;
+	seo_description: string;
+	canonical_url: string;
+	og_image: PostMediaRef | null;
+	locale: string;
+	created_by: string;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface TemplateCreatePayload {
+	name: string;
+	description?: string;
+	/** When set, copies content/metadata from this post id. */
+	from_post?: string;
+	title?: string;
+	excerpt?: string;
+	content_json?: string;
+	content_html?: string;
+	cover_image?: string;
+	categories?: string[];
+	tags?: string[];
+	featured?: boolean;
+	seo_title?: string;
+	seo_description?: string;
+	canonical_url?: string;
+	og_image?: string;
+	locale?: string;
+}
+
+export interface TemplateUpdatePayload {
+	name?: string;
+	description?: string;
+	title?: string;
+	excerpt?: string;
+	content_json?: string;
+	content_html?: string;
+	cover_image?: string;
+	categories?: string[];
+	tags?: string[];
+	featured?: boolean;
+	seo_title?: string;
+	seo_description?: string;
+	canonical_url?: string;
+	og_image?: string;
+	locale?: string;
+}
+
+export function listTemplates(): Promise<{ templates: PostTemplate[] }> {
+	return adminFetch<{ templates: PostTemplate[] }>('/templates');
+}
+
+export function getTemplate(id: string): Promise<{ template: PostTemplate }> {
+	return adminFetch<{ template: PostTemplate }>(`/templates/${id}`);
+}
+
+export function createTemplate(payload: TemplateCreatePayload): Promise<{ template: PostTemplate }> {
+	return adminFetch<{ template: PostTemplate }>('/templates', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function updateTemplate(
+	id: string,
+	payload: TemplateUpdatePayload
+): Promise<{ template: PostTemplate }> {
+	return adminFetch<{ template: PostTemplate }>(`/templates/${id}`, {
+		method: 'PATCH',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function deleteTemplate(id: string): Promise<void> {
+	return adminFetch<void>(`/templates/${id}`, { method: 'DELETE' });
+}
+
+export function createPostFromTemplate(id: string): Promise<{ post: PostFull }> {
+	return adminFetch<{ post: PostFull }>(`/templates/${id}/create-post`, { method: 'POST' });
+}
+
 /** One successfully imported Markdown document. */
 export interface MarkdownImportSuccess {
 	filename: string;

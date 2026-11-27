@@ -109,6 +109,14 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// Scheduling calendar: date-range view of scheduled + published posts.
 	mux.Handle("GET /api/admin/v1/calendar", user(h.listCalendar))
 
+	// Content duplication templates (v0.3): reusable starting points for new drafts.
+	mux.Handle("GET /api/admin/v1/templates", user(h.listTemplates))
+	mux.Handle("POST /api/admin/v1/templates", user(h.createTemplate))
+	mux.Handle("GET /api/admin/v1/templates/{id}", user(h.getTemplate))
+	mux.Handle("PATCH /api/admin/v1/templates/{id}", user(h.updateTemplate))
+	mux.Handle("DELETE /api/admin/v1/templates/{id}", user(h.deleteTemplate))
+	mux.Handle("POST /api/admin/v1/templates/{id}/create-post", user(h.createPostFromTemplate))
+
 	mux.Handle("GET /api/admin/v1/posts", user(h.listPosts))
 	mux.Handle("POST /api/admin/v1/posts", user(h.createPost))
 	// Import routes are static paths and must be registered alongside the

@@ -164,8 +164,12 @@ func DeleteMedia(ctx context.Context, db DBTX, id string) error {
 func MediaInUse(ctx context.Context, db DBTX, id string) (bool, error) {
 	var exists bool
 	err := db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM posts WHERE cover_image = ? OR og_image = ?)`,
-		id, id,
+		`SELECT EXISTS(
+			SELECT 1 FROM posts WHERE cover_image = ? OR og_image = ?
+			UNION ALL
+			SELECT 1 FROM post_templates WHERE cover_image = ? OR og_image = ?
+		)`,
+		id, id, id, id,
 	).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("check media in use: %w", err)

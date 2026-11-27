@@ -59,6 +59,7 @@ describe('Sidebar', () => {
 			['Posts', '/posts'],
 			['Calendar', '/calendar'],
 			['Reviews', '/reviews'],
+			['Templates', '/templates'],
 			['Categories', '/categories'],
 			['Tags', '/tags'],
 			['Media', '/media'],
