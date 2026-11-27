@@ -26,6 +26,7 @@
 	import { Popup, popupItemClass } from '$lib/components/ui/popup/index.js';
 	import {
 		ApiError,
+		approveReview,
 		archivePost,
 		createPost,
 		createPreviewToken,
@@ -37,9 +38,12 @@
 		listCategories,
 		listTags,
 		publishPost,
+		requestChanges,
 		schedulePost,
+		submitReview,
 		unpublishPost,
 		updatePost,
+		withdrawReview,
 		type Author,
 		type Category,
 		type PostFull,
@@ -96,6 +100,12 @@
 	let previewBusy = $state(false);
 	let previewError = $state('');
 	let previewHintVisible = $state(false);
+
+	// --- Draft review (v0.3) -------------------------------------------------
+	let changesPanelOpen = $state(false);
+	let changesNote = $state('');
+	let changesFieldError = $state('');
+	let requireReviewBeforePublish = $state(false);
 
 	/** Pads a datetime-local value's date parts, local time (no timezone conversion). */
 	function toLocalDatetimeInputValue(iso: string): string {
@@ -177,6 +187,58 @@
 	async function handleArchive() {
 		if (!postId) return;
 		await runStatusOp(() => archivePost(postId));
+	}
+
+	async function handleSubmitReview() {
+		if (!postId) return;
+		await runStatusOp(() => submitReview(postId));
+	}
+
+	async function handleApproveReview() {
+		if (!postId) return;
+		await runStatusOp(() => approveReview(postId));
+	}
+
+	async function handleWithdrawReview() {
+		if (!postId) return;
+		await runStatusOp(() => withdrawReview(postId));
+	}
+
+	function openChangesPanel() {
+		if (!requireClean()) return;
+		changesNote = '';
+		changesFieldError = '';
+		changesPanelOpen = true;
+	}
+
+	function cancelChangesPanel() {
+		changesPanelOpen = false;
+		changesFieldError = '';
+	}
+
+	async function confirmRequestChanges() {
+		if (!postId) return;
+		const note = changesNote.trim();
+		if (!note) {
+			changesFieldError = 'A note is required.';
+			return;
+		}
+		statusError = '';
+		statusBusy = true;
+		try {
+			const { post } = await requestChanges(postId, { note });
+			formState.markSaved(post);
+			loadedUpdatedAt = post.updated_at;
+			changesPanelOpen = false;
+		} catch (err) {
+			if (err instanceof ApiError && err.code === 'validation_failed' && err.details?.note) {
+				changesFieldError = err.details.note;
+			} else {
+				statusError = describeSaveError(err);
+			}
+		} finally {
+			statusBusy = false;
+		}
 	}
 
 	// Duplicate (from the "..." menu) — copies the last-saved post and opens the
@@ -387,12 +449,13 @@
 			if (settings.available_locales?.length) {
 				availableLocales = settings.available_locales;
 			}
+			requireReviewBeforePublish = !!settings.require_review_before_publish;
 			// Seed a new post's locale from the site default without dirtying the form.
 			if (formState.isNew && settings.locale && formState.locale === 'en') {
 				formState.locale = settings.locale;
 			}
 		} catch {
-			// getSettings is owner-only; editors fall back to ['en'].
+			// Settings read failed — keep locale/review defaults.
 		}
 	}
 
@@ -625,6 +688,44 @@
 					</Button>
 				{/if}
 
+				{#if !formState.isNew && (formState.status === 'draft' || formState.status === 'archived')}
+					{#if formState.reviewStatus === 'none' || formState.reviewStatus === 'changes_requested'}
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={formState.dirty || statusBusy}
+							onclick={handleSubmitReview}
+						>
+							{statusBusy ? 'Submitting…' : 'Submit for review'}
+						</Button>
+					{:else if formState.reviewStatus === 'pending'}
+						<Button
+							variant="primary"
+							size="sm"
+							disabled={formState.dirty || statusBusy}
+							onclick={handleApproveReview}
+						>
+							{statusBusy ? 'Approving…' : 'Approve'}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={formState.dirty || statusBusy}
+							onclick={openChangesPanel}
+						>
+							Request changes
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={formState.dirty || statusBusy}
+							onclick={handleWithdrawReview}
+						>
+							Withdraw
+						</Button>
+					{/if}
+				{/if}
+
 				{#if !formState.isNew}
 					<!-- Secondary actions in a Payload-style "..." popup menu -->
 					<Popup align="right">
@@ -678,6 +779,25 @@
 				<p class="px-6 lg:px-[60px] pb-2 text-xs text-stone-400">
 					Save your changes first to publish, schedule, unpublish or archive.
 				</p>
+			{/if}
+			{#if changesPanelOpen}
+				<div class="px-6 lg:px-[60px] pb-3">
+					<div class="space-y-2 rounded-md border border-stone-200 bg-stone-50 p-3">
+						<Label for="changes-note">Request changes</Label>
+						<Textarea id="changes-note" class="min-h-20" bind:value={changesNote} />
+						{#if changesFieldError}
+							<p class="text-xs text-destructive">{changesFieldError}</p>
+						{/if}
+						<div class="flex flex-wrap gap-2">
+							<Button size="sm" disabled={statusBusy} onclick={confirmRequestChanges}>
+								{statusBusy ? 'Sending…' : 'Send'}
+							</Button>
+							<Button variant="outline" size="sm" disabled={statusBusy} onclick={cancelChangesPanel}>
+								Cancel
+							</Button>
+						</div>
+					</div>
+				</div>
 			{/if}
 			{#if statusError}
 				<p class="px-6 lg:px-[60px] pb-2 text-xs text-destructive" role="alert">
@@ -804,6 +924,23 @@
 							<span class="text-stone-400">Status</span>
 							<span class="font-semibold capitalize text-stone-800">{formState.status}</span>
 						</div>
+						<div class="flex items-baseline justify-between gap-3">
+							<span class="text-stone-400">Review</span>
+							<span class="font-semibold capitalize text-stone-800"
+								>{formState.reviewStatus.replaceAll('_', ' ')}</span
+							>
+						</div>
+						{#if formState.reviewNote}
+							<div class="space-y-1">
+								<span class="text-stone-400">Review note</span>
+								<p class="text-stone-800">{formState.reviewNote}</p>
+							</div>
+						{/if}
+						{#if requireReviewBeforePublish && formState.reviewStatus !== 'approved' && (formState.status === 'draft' || formState.status === 'archived')}
+							<p class="text-[12px] text-amber-700">
+								Approval required before publish or schedule.
+							</p>
+						{/if}
 						{#if formState.status === 'scheduled' && formState.scheduledFor}
 							<div class="flex items-baseline justify-between gap-3">
 								<span class="text-stone-400">Scheduled for</span>

@@ -19,6 +19,15 @@ const (
 	PostStatusArchived  = "archived"
 )
 
+// Review statuses (orthogonal to publication status). Constrained by the
+// posts.review_status CHECK in 0007_draft_review.
+const (
+	ReviewStatusNone             = "none"
+	ReviewStatusPending          = "pending"
+	ReviewStatusApproved         = "approved"
+	ReviewStatusChangesRequested = "changes_requested"
+)
+
 // emptyContentJSON is the placeholder stored in posts.content_json /
 // post_revisions.content_json when a caller supplies no serialized editor
 // state (a title-only draft). The column is NOT NULL, so an empty input is
@@ -38,27 +47,32 @@ func contentJSONOrDefault(s string) string {
 // Post is a row of the posts table (scalar columns only; the related
 // categories, tags and author are loaded separately).
 type Post struct {
-	ID               string
-	Title            string
-	Slug             string
-	Excerpt          string
-	ContentJSON      string
-	ContentHTML      string
-	ContentText      string
-	CoverImage       string
-	Status           string
-	Author           string // user id
-	Featured         bool
-	SEOTitle         string
-	SEODescription   string
-	CanonicalURL     string
-	OGImage          string
-	Locale           string // BCP 47 language tag (e.g. "en", "tr")
-	TranslationGroup string // "" when the post stands alone
-	ScheduledFor     *time.Time
-	PublishedAt      *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                   string
+	Title                string
+	Slug                 string
+	Excerpt              string
+	ContentJSON          string
+	ContentHTML          string
+	ContentText          string
+	CoverImage           string
+	Status               string
+	Author               string // user id
+	Featured             bool
+	SEOTitle             string
+	SEODescription       string
+	CanonicalURL         string
+	OGImage              string
+	Locale               string // BCP 47 language tag (e.g. "en", "tr")
+	TranslationGroup     string // "" when the post stands alone
+	ScheduledFor         *time.Time
+	PublishedAt          *time.Time
+	ReviewStatus         string // none | pending | approved | changes_requested
+	ReviewNote           string // latest reviewer feedback; "" when unset
+	ReviewedBy           string // user id; "" when unset
+	ReviewedAt           *time.Time
+	SubmittedForReviewAt *time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // NewPost holds the writable fields for CreatePost. ID and timestamps are set
@@ -111,13 +125,14 @@ type PostUpdate struct {
 
 // PostFilter is the set of list filters ListPosts and CountPosts share.
 type PostFilter struct {
-	Status     string // "" = any
-	CategoryID string // "" = any
-	TagID      string // "" = any
-	AuthorID   string // "" = any
-	Locale     string // "" = any
-	Featured   *bool  // nil = any
-	Search     string // "" = any; FTS5 over title, excerpt, content_text
+	Status       string // "" = any
+	CategoryID   string // "" = any
+	TagID        string // "" = any
+	AuthorID     string // "" = any
+	Locale       string // "" = any
+	ReviewStatus string // "" = any; one of ReviewStatus*
+	Featured     *bool  // nil = any
+	Search       string // "" = any; FTS5 over title, excerpt, content_text
 
 	// PublishedBefore, when non-nil, restricts results to rows with a
 	// non-NULL published_at at or before this time — the public API's
@@ -175,6 +190,7 @@ func CreatePost(ctx context.Context, db DBTX, in NewPost) (Post, error) {
 		OGImage:          in.OGImage,
 		Locale:           locale,
 		TranslationGroup: in.TranslationGroup,
+		ReviewStatus:     ReviewStatusNone,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
@@ -242,6 +258,36 @@ func SetPostStatus(ctx context.Context, db DBTX, id, status string, publishedAt,
 	return requireRowsAffected(res)
 }
 
+// PostReviewUpdate is the write payload for SetPostReview. ReviewedBy and
+// ReviewNote are stored as NULL when empty; ReviewedAt / SubmittedForReviewAt
+// as NULL when nil.
+type PostReviewUpdate struct {
+	ReviewStatus         string
+	ReviewNote           string
+	ReviewedBy           string
+	ReviewedAt           *time.Time
+	SubmittedForReviewAt *time.Time
+}
+
+// SetPostReview overwrites a post's review columns (and bumps updated_at),
+// leaving publication status and content untouched. Returns ErrNotFound if
+// no such post exists.
+func SetPostReview(ctx context.Context, db DBTX, id string, in PostReviewUpdate) error {
+	res, err := db.ExecContext(ctx, `
+		UPDATE posts SET
+			review_status = ?, review_note = ?, reviewed_by = ?,
+			reviewed_at = ?, submitted_for_review_at = ?, updated_at = ?
+		WHERE id = ?`,
+		in.ReviewStatus, nullString(in.ReviewNote), nullString(in.ReviewedBy),
+		nullTime(in.ReviewedAt), nullTime(in.SubmittedForReviewAt),
+		formatTime(time.Now().UTC()), id,
+	)
+	if err != nil {
+		return fmt.Errorf("set post review: %w", err)
+	}
+	return requireRowsAffected(res)
+}
+
 // ListDuePosts returns every scheduled post whose scheduled_for is at or
 // before now, ordered by scheduled_for (oldest first). It is the query
 // behind the scheduled-publish worker's promotion pass.
@@ -250,7 +296,9 @@ func ListDuePosts(ctx context.Context, db DBTX, now time.Time) ([]Post, error) {
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
 			canonical_url, og_image, locale, translation_group,
-			scheduled_for, published_at, created_at, updated_at
+			scheduled_for, published_at,
+			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
+			created_at, updated_at
 		FROM posts
 		WHERE status = ? AND scheduled_for IS NOT NULL AND scheduled_for <= ?
 		ORDER BY scheduled_for ASC, id ASC`,
@@ -293,7 +341,9 @@ func GetPostByID(ctx context.Context, db DBTX, id string) (Post, error) {
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
 			canonical_url, og_image, locale, translation_group,
-			scheduled_for, published_at, created_at, updated_at
+			scheduled_for, published_at,
+			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
+			created_at, updated_at
 		FROM posts WHERE id = ?`, id)
 	return scanPost(row)
 }
@@ -307,7 +357,9 @@ func GetPostBySlug(ctx context.Context, db DBTX, slug string) (Post, error) {
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
 			canonical_url, og_image, locale, translation_group,
-			scheduled_for, published_at, created_at, updated_at
+			scheduled_for, published_at,
+			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
+			created_at, updated_at
 		FROM posts WHERE slug = ?`, slug)
 	return scanPost(row)
 }
@@ -411,6 +463,10 @@ func postQueryParts(filter PostFilter) (from, where string, args []any, useFTS b
 		conds = append(conds, "posts.locale = ?")
 		args = append(args, filter.Locale)
 	}
+	if filter.ReviewStatus != "" {
+		conds = append(conds, "posts.review_status = ?")
+		args = append(args, filter.ReviewStatus)
+	}
 	if filter.Featured != nil {
 		conds = append(conds, "posts.featured = ?")
 		args = append(args, boolToInt(*filter.Featured))
@@ -445,14 +501,18 @@ func postSelectColumns(useFTS bool) string {
 	cols := `id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
 			canonical_url, og_image, locale, translation_group,
-			scheduled_for, published_at, created_at, updated_at`
+			scheduled_for, published_at,
+			review_status, review_note, reviewed_by, reviewed_at, submitted_for_review_at,
+			created_at, updated_at`
 	if !useFTS {
 		return cols
 	}
 	return `posts.id, posts.title, posts.slug, posts.excerpt, posts.content_json, posts.content_html, posts.content_text,
 			posts.cover_image, posts.status, posts.author, posts.featured, posts.seo_title, posts.seo_description,
 			posts.canonical_url, posts.og_image, posts.locale, posts.translation_group,
-			posts.scheduled_for, posts.published_at, posts.created_at, posts.updated_at`
+			posts.scheduled_for, posts.published_at,
+			posts.review_status, posts.review_note, posts.reviewed_by, posts.reviewed_at, posts.submitted_for_review_at,
+			posts.created_at, posts.updated_at`
 }
 
 // sortColumn maps a PostSortField to its ORDER BY column expression. Title
@@ -563,26 +623,32 @@ func GetPostTags(ctx context.Context, db DBTX, postID string) ([]Tag, error) {
 
 func scanPost(row rowScanner) (Post, error) {
 	var (
-		p                Post
-		excerpt          sql.NullString
-		coverImage       sql.NullString
-		featured         int
-		seoTitle         sql.NullString
-		seoDesc          sql.NullString
-		canonicalURL     sql.NullString
-		ogImage          sql.NullString
-		translationGroup sql.NullString
-		scheduledFor     sql.NullString
-		publishedAt      sql.NullString
-		createdAt        string
-		updatedAt        string
+		p                    Post
+		excerpt              sql.NullString
+		coverImage           sql.NullString
+		featured             int
+		seoTitle             sql.NullString
+		seoDesc              sql.NullString
+		canonicalURL         sql.NullString
+		ogImage              sql.NullString
+		translationGroup     sql.NullString
+		scheduledFor         sql.NullString
+		publishedAt          sql.NullString
+		reviewNote           sql.NullString
+		reviewedBy           sql.NullString
+		reviewedAt           sql.NullString
+		submittedForReviewAt sql.NullString
+		createdAt            string
+		updatedAt            string
 	)
 
 	err := row.Scan(
 		&p.ID, &p.Title, &p.Slug, &excerpt, &p.ContentJSON, &p.ContentHTML, &p.ContentText,
 		&coverImage, &p.Status, &p.Author, &featured, &seoTitle, &seoDesc,
 		&canonicalURL, &ogImage, &p.Locale, &translationGroup,
-		&scheduledFor, &publishedAt, &createdAt, &updatedAt,
+		&scheduledFor, &publishedAt,
+		&p.ReviewStatus, &reviewNote, &reviewedBy, &reviewedAt, &submittedForReviewAt,
+		&createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Post{}, ErrNotFound
@@ -599,8 +665,13 @@ func scanPost(row rowScanner) (Post, error) {
 	p.CanonicalURL = stringOrEmpty(canonicalURL)
 	p.OGImage = stringOrEmpty(ogImage)
 	p.TranslationGroup = stringOrEmpty(translationGroup)
+	p.ReviewNote = stringOrEmpty(reviewNote)
+	p.ReviewedBy = stringOrEmpty(reviewedBy)
 	if p.Locale == "" {
 		p.Locale = "en"
+	}
+	if p.ReviewStatus == "" {
+		p.ReviewStatus = ReviewStatusNone
 	}
 
 	if p.CreatedAt, err = parseTime(createdAt); err != nil {
@@ -613,6 +684,12 @@ func scanPost(row rowScanner) (Post, error) {
 		return Post{}, err
 	}
 	if p.PublishedAt, err = parseTimePtr(publishedAt); err != nil {
+		return Post{}, err
+	}
+	if p.ReviewedAt, err = parseTimePtr(reviewedAt); err != nil {
+		return Post{}, err
+	}
+	if p.SubmittedForReviewAt, err = parseTimePtr(submittedForReviewAt); err != nil {
 		return Post{}, err
 	}
 	return p, nil

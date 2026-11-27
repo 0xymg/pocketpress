@@ -335,12 +335,13 @@ func (s *Service) toAuthor(ctx context.Context, u store.User) Author {
 // PostListQuery is the resolved (already clamped/normalized by the handler)
 // query for ListPosts.
 type PostListQuery struct {
-	Page       int
-	PerPage    int
-	Status     string
-	CategoryID string
-	Locale     string
-	Search     string
+	Page         int
+	PerPage      int
+	Status       string
+	CategoryID   string
+	Locale       string
+	ReviewStatus string
+	Search       string
 	// Sort selects the column to order by. The zero value (PostSortUpdatedAt)
 	// preserves the admin list's long-standing default.
 	Sort     store.PostSortField
@@ -359,7 +360,10 @@ type PostListResult struct {
 // ListPosts returns one page of posts matching q, hydrated with their
 // author, categories and tags.
 func (s *Service) ListPosts(ctx context.Context, q PostListQuery) (PostListResult, error) {
-	filter := store.PostFilter{Status: q.Status, CategoryID: q.CategoryID, Locale: q.Locale, Search: q.Search}
+	filter := store.PostFilter{
+		Status: q.Status, CategoryID: q.CategoryID, Locale: q.Locale,
+		ReviewStatus: q.ReviewStatus, Search: q.Search,
+	}
 
 	total, err := store.CountPosts(ctx, s.db, filter)
 	if err != nil {

@@ -62,8 +62,8 @@ Features that serve newsletters, commerce, community, memberships, or help build
 
 ## Current phase
 
-**v0.3 in progress** — Multiple authors with richer profiles is on `main`. Localization (migration `0006`) is stacked ahead of this slice. **Content scheduling calendar** is the current slice: admin `GET /api/admin/v1/calendar?from=&to=` plus `/calendar` month view of scheduled and published posts (reschedule via existing schedule op). No schema migration.
+**v0.3 in progress** — Authors, localization, and scheduling calendar are on `main`. **Draft review workflow** is the current slice: migration `0007_draft_review` (`posts.review_status` + note/reviewer timestamps; `settings.require_review_before_publish`); admin submit/approve/request-changes/withdraw ops; `/reviews` queue; publish/schedule gate when required.
 
 **v0.2 complete** — all plan §16 items: RSS/Atom feeds, Sitemap, JS/TS SDK, Markdown/Ghost/WordPress import, FTS, image transforms, webhook filters, and API key management for private content APIs (`ppkey_…` Bearer keys; SHA-256 hashed at rest; scopes `content:read` / `preview:read`; admin `/settings/api-keys`; uses existing `api_keys` table from `0001_init`).
 
-v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02). Remaining v0.3 items (draft review, duplication templates, per-post metadata) are not started.
+v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02). Remaining v0.3 items (duplication templates, per-post metadata) are not started.

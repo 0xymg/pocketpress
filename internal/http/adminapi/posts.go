@@ -61,22 +61,27 @@ type translationRefDTO struct {
 }
 
 type postSummaryDTO struct {
-	ID           string       `json:"id"`
-	Title        string       `json:"title"`
-	Slug         string       `json:"slug"`
-	Status       string       `json:"status"`
-	Excerpt      string       `json:"excerpt"`
-	Featured     bool         `json:"featured"`
-	Locale       string       `json:"locale"`
-	Author       authorDTO    `json:"author"`
-	Categories   []termRefDTO `json:"categories"`
-	Tags         []termRefDTO `json:"tags"`
-	CoverImage   *mediaRefDTO `json:"cover_image"`
-	OGImage      *mediaRefDTO `json:"og_image"`
-	ScheduledFor *time.Time   `json:"scheduled_for"`
-	PublishedAt  *time.Time   `json:"published_at"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
+	ID                   string       `json:"id"`
+	Title                string       `json:"title"`
+	Slug                 string       `json:"slug"`
+	Status               string       `json:"status"`
+	Excerpt              string       `json:"excerpt"`
+	Featured             bool         `json:"featured"`
+	Locale               string       `json:"locale"`
+	Author               authorDTO    `json:"author"`
+	Categories           []termRefDTO `json:"categories"`
+	Tags                 []termRefDTO `json:"tags"`
+	CoverImage           *mediaRefDTO `json:"cover_image"`
+	OGImage              *mediaRefDTO `json:"og_image"`
+	ScheduledFor         *time.Time   `json:"scheduled_for"`
+	PublishedAt          *time.Time   `json:"published_at"`
+	ReviewStatus         string       `json:"review_status"`
+	ReviewNote           string       `json:"review_note"`
+	ReviewedBy           *string      `json:"reviewed_by"`
+	ReviewedAt           *time.Time   `json:"reviewed_at"`
+	SubmittedForReviewAt *time.Time   `json:"submitted_for_review_at"`
+	CreatedAt            time.Time    `json:"created_at"`
+	UpdatedAt            time.Time    `json:"updated_at"`
 }
 
 // postFullDTO is the frozen POST_FULL shape: POST_SUMMARY plus the body and
@@ -99,23 +104,32 @@ func toPostSummaryDTO(p content.Post) postSummaryDTO {
 	if locale == "" {
 		locale = "en"
 	}
+	reviewStatus := p.Row.ReviewStatus
+	if reviewStatus == "" {
+		reviewStatus = store.ReviewStatusNone
+	}
 	return postSummaryDTO{
-		ID:           p.Row.ID,
-		Title:        p.Row.Title,
-		Slug:         p.Row.Slug,
-		Status:       p.Row.Status,
-		Excerpt:      p.Row.Excerpt,
-		Featured:     p.Row.Featured,
-		Locale:       locale,
-		Author:       authorDTO{ID: p.Author.ID, Name: p.Author.Name, Slug: p.Author.Slug},
-		Categories:   categoryRefs(p.Categories),
-		Tags:         tagRefs(p.Tags),
-		CoverImage:   toMediaRefDTO(p.CoverImage),
-		OGImage:      toMediaRefDTO(p.OGImage),
-		ScheduledFor: p.Row.ScheduledFor,
-		PublishedAt:  p.Row.PublishedAt,
-		CreatedAt:    p.Row.CreatedAt,
-		UpdatedAt:    p.Row.UpdatedAt,
+		ID:                   p.Row.ID,
+		Title:                p.Row.Title,
+		Slug:                 p.Row.Slug,
+		Status:               p.Row.Status,
+		Excerpt:              p.Row.Excerpt,
+		Featured:             p.Row.Featured,
+		Locale:               locale,
+		Author:               authorDTO{ID: p.Author.ID, Name: p.Author.Name, Slug: p.Author.Slug},
+		Categories:           categoryRefs(p.Categories),
+		Tags:                 tagRefs(p.Tags),
+		CoverImage:           toMediaRefDTO(p.CoverImage),
+		OGImage:              toMediaRefDTO(p.OGImage),
+		ScheduledFor:         p.Row.ScheduledFor,
+		PublishedAt:          p.Row.PublishedAt,
+		ReviewStatus:         reviewStatus,
+		ReviewNote:           p.Row.ReviewNote,
+		ReviewedBy:           stringPtrOrNil(p.Row.ReviewedBy),
+		ReviewedAt:           p.Row.ReviewedAt,
+		SubmittedForReviewAt: p.Row.SubmittedForReviewAt,
+		CreatedAt:            p.Row.CreatedAt,
+		UpdatedAt:            p.Row.UpdatedAt,
 	}
 }
 
@@ -190,15 +204,30 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	reviewStatus := q.Get("review_status")
+	switch reviewStatus {
+	case "", store.ReviewStatusNone, store.ReviewStatusPending, store.ReviewStatusApproved, store.ReviewStatusChangesRequested:
+	default:
+		// Unknown filter → empty page (same pattern as a malformed locale).
+		middleware.WriteJSON(w, http.StatusOK, map[string]any{
+			"posts": []postSummaryDTO{},
+			"meta": map[string]int{
+				"page": page, "per_page": perPage, "total_items": 0, "total_pages": 0,
+			},
+		})
+		return
+	}
+
 	result, err := h.content.ListPosts(r.Context(), content.PostListQuery{
-		Page:       page,
-		PerPage:    perPage,
-		Status:     q.Get("status"),
-		CategoryID: q.Get("category"),
-		Locale:     localeFilter,
-		Search:     q.Get("search"),
-		Sort:       sortField,
-		SortDesc:   sortDesc,
+		Page:         page,
+		PerPage:      perPage,
+		Status:       q.Get("status"),
+		CategoryID:   q.Get("category"),
+		Locale:       localeFilter,
+		ReviewStatus: reviewStatus,
+		Search:       q.Get("search"),
+		Sort:         sortField,
+		SortDesc:     sortDesc,
 	})
 	if err != nil {
 		h.serverError(w, err)

@@ -63,6 +63,11 @@ const EXISTING_POST = {
 	tags: [],
 	scheduled_for: null,
 	published_at: null,
+	review_status: 'none' as const,
+	review_note: '',
+	reviewed_by: null,
+	reviewed_at: null,
+	submitted_for_review_at: null,
 	created_at: '2024-01-01T00:00:00Z',
 	updated_at: '2024-01-02T00:00:00Z',
 	content_json: '{"root":{"children":[{"children":[{"detail":0,"format":0,"mode":"normal","style":"","text":"Body text","type":"text","version":1}],"direction":"ltr","format":"","indent":0,"type":"paragraph","version":1}],"direction":"ltr","format":"","indent":0,"type":"root","version":1}}',
@@ -136,7 +141,8 @@ function withReferenceRoutes(routes: Record<string, () => ReturnType<typeof json
 					cors_origins: [],
 					public_api_enabled: true,
 					preview_url_template: null,
-					webhook_user_agent: 'PocketPress'
+					webhook_user_agent: 'PocketPress',
+					require_review_before_publish: false
 				}
 			}),
 		...routes

@@ -45,7 +45,8 @@ const SETTINGS = {
 	cors_origins: ['https://example.com', 'https://www.example.com'],
 	public_api_enabled: true,
 	preview_url_template: 'https://example.com/api/preview?token={token}&slug={slug}',
-	webhook_user_agent: 'PocketPress/0.1.0'
+	webhook_user_agent: 'PocketPress/0.1.0',
+	require_review_before_publish: false
 };
 
 function jsonResponse(status: number, ok: boolean, body: unknown) {
