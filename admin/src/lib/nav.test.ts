@@ -8,6 +8,7 @@ describe('activeKeyFromPath', () => {
 		['/posts', 'posts'],
 		['/posts/new', 'posts'],
 		['/posts/abc-123', 'posts'],
+		['/calendar', 'calendar'],
 		['/categories', 'categories'],
 		['/tags', 'tags'],
 		['/media', 'media'],
@@ -45,6 +46,7 @@ describe('NAV_GROUPS', () => {
 		expect(content?.items.map((i) => i.key)).toEqual([
 			'dashboard',
 			'posts',
+			'calendar',
 			'categories',
 			'tags',
 			'media',

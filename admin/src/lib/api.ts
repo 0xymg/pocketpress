@@ -562,6 +562,41 @@ export function schedulePost(
 	});
 }
 
+// ---------------------------------------------------------------------------
+// Scheduling calendar (v0.3) — month view of scheduled + published posts.
+// ---------------------------------------------------------------------------
+
+export interface CalendarAuthor {
+	id: string;
+	name: string;
+	slug: string;
+}
+
+export interface CalendarEntry {
+	id: string;
+	title: string;
+	slug: string;
+	status: PostStatus;
+	locale: string;
+	author: CalendarAuthor;
+	/** Placement timestamp (scheduled_for or published_at). */
+	at: string;
+	scheduled_for: string | null;
+	published_at: string | null;
+}
+
+export interface CalendarParams {
+	/** YYYY-MM-DD or RFC3339 */
+	from: string;
+	/** YYYY-MM-DD or RFC3339 */
+	to: string;
+}
+
+export function listCalendar(params: CalendarParams): Promise<{ entries: CalendarEntry[] }> {
+	const qs = buildQuery({ from: params.from, to: params.to });
+	return adminFetch<{ entries: CalendarEntry[] }>(`/calendar${qs}`);
+}
+
 export function archivePost(id: string): Promise<{ post: PostFull }> {
 	return adminFetch<{ post: PostFull }>(`/posts/${id}/archive`, { method: 'POST' });
 }

@@ -57,6 +57,7 @@ describe('Sidebar', () => {
 		for (const [name, href] of [
 			['Dashboard', '/'],
 			['Posts', '/posts'],
+			['Calendar', '/calendar'],
 			['Categories', '/categories'],
 			['Tags', '/tags'],
 			['Media', '/media'],
