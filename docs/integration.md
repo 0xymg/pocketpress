@@ -74,6 +74,17 @@ export const load: PageServerLoad = async ({ fetch }) => {
 };
 ```
 
+## Syndication feeds (RSS / Atom)
+
+Published posts are also available as feeds (same visibility rule as the JSON API; disabled when `public_api_enabled` is false):
+
+```text
+GET /api/v1/feed.rss
+GET /api/v1/feed.atom
+```
+
+Each feed returns up to 20 newest posts. Item/entry links use a post's SEO `canonical_url` when set; otherwise `{site_url}/{slug}`.
+
 ## CORS setup
 
 Cross-origin requests require explicit allowlist configuration. In the PocketPress admin, go to **Settings → General** and add your frontend URL to **CORS Origins**, or set `PP_CORS_ORIGINS` at startup:

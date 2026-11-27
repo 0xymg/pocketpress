@@ -64,11 +64,14 @@ func TestVerifyTamperedSignature(t *testing.T) {
 
 	i := strings.IndexByte(token, '.')
 	sig := []byte(token[i+1:])
-	// Flip the last character to a different base64url character.
-	if sig[len(sig)-1] == 'A' {
-		sig[len(sig)-1] = 'B'
+	// Flip the first signature character. The last base64url character of a
+	// 32-byte HMAC only carries 4 data bits; A↔B can leave the decoded MAC
+	// unchanged and make this test flake. The first character always maps
+	// to a full 6 bits of the MAC.
+	if sig[0] == 'A' {
+		sig[0] = 'B'
 	} else {
-		sig[len(sig)-1] = 'A'
+		sig[0] = 'A'
 	}
 	tampered := token[:i+1] + string(sig)
 

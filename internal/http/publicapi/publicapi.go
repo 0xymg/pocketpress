@@ -1,5 +1,6 @@
 // Package publicapi implements PocketPress's public, unauthenticated,
-// versioned content API under /api/v1: posts, categories and tags.
+// versioned content API under /api/v1: posts, categories, tags, and
+// syndication feeds (RSS/Atom).
 //
 // Every route here only ever surfaces publicly-visible content — see the
 // hard visibility rule enforced by content.Service's ListPublicPosts and
@@ -67,6 +68,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/tags", h.gate(h.listTags))
 	mux.Handle("GET /api/v1/tags/{slug}", h.gate(h.getTag))
 	mux.Handle("GET /api/v1/tags/{slug}/posts", h.gate(h.tagPosts))
+
+	// Syndication feeds (v0.2): newest published posts as RSS 2.0 / Atom 1.0.
+	mux.Handle("GET /api/v1/feed.rss", h.gate(h.feedRSS))
+	mux.Handle("GET /api/v1/feed.atom", h.gate(h.feedAtom))
 
 	// The preview endpoint is deliberately NOT behind the public_api_enabled
 	// gate: it is an authorized flow (a valid, post-scoped preview token is

@@ -7,9 +7,11 @@ info:
     posts, categories and tags. Only ever returns published content — see
     the visibility rule documented on GET /api/v1/posts/{slug}.
   description: >-
-    All `/api/v1/*` responses are `Content-Type: application/json` with an
-    `X-Content-Type-Options: nosniff` header. Errors use a single envelope
-    (see the `Error` schema) with a machine-readable `code`.
+    Most `/api/v1/*` responses are `Content-Type: application/json` with an
+    `X-Content-Type-Options: nosniff` header. Syndication feeds return XML
+    (`application/rss+xml` / `application/atom+xml`) instead. Errors use a
+    single JSON envelope (see the `Error` schema) with a machine-readable
+    `code`.
 
 
     ## Availability
@@ -24,9 +26,9 @@ info:
 
 
     List endpoints (`GET /api/v1/posts`, the category/tag-scoped post
-    lists, and the categories/tags list and detail endpoints) send
-    `Cache-Control: public, max-age=60`. The post detail endpoint
-    (`GET /api/v1/posts/{slug}`) instead sends
+    lists, the categories/tags list and detail endpoints, and the RSS/Atom
+    feeds) send `Cache-Control: public, max-age=60`. The post detail
+    endpoint (`GET /api/v1/posts/{slug}`) instead sends
     `Cache-Control: public, max-age=0, must-revalidate` plus a strong `ETag`
     (a SHA-256 hash of the post's id and `updated_at`) and honors
     `If-None-Match`, returning `304 Not Modified` with an empty body when
@@ -430,6 +432,62 @@ paths:
                 api_disabled:
                   $ref: "#/components/examples/ApiDisabledError"
 
+  /api/v1/feed.rss:
+    get:
+      operationId: getFeedRSS
+      summary: RSS 2.0 feed of published posts
+      description: >-
+        Returns an RSS 2.0 XML document with up to 20 newest publicly-visible
+        posts (same visibility rule as GET /api/v1/posts/{slug}). Channel
+        metadata comes from settings `site_name` / `site_url`. Each item's
+        `<link>` prefers the post's SEO `canonical_url` when set; otherwise
+        it is `{site_url}/{slug}`. Item `<guid>` values are stable
+        `urn:uuid:{post_id}` (not permalinks). Gated by `public_api_enabled`.
+      tags: [Feeds]
+      responses:
+        "200":
+          description: RSS 2.0 document.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=60"
+          content:
+            application/rss+xml:
+              schema:
+                type: string
+                description: RSS 2.0 XML document.
+        "404":
+          $ref: "#/components/responses/ApiDisabled"
+
+  /api/v1/feed.atom:
+    get:
+      operationId: getFeedAtom
+      summary: Atom 1.0 feed of published posts
+      description: >-
+        Returns an Atom 1.0 XML document with up to 20 newest publicly-visible
+        posts (same visibility rule as GET /api/v1/posts/{slug}). Feed
+        metadata comes from settings `site_name` / `site_url`; `rel=self`
+        points at this endpoint's absolute URL. Entry links prefer
+        `canonical_url`, else `{site_url}/{slug}`. Entry ids are
+        `urn:uuid:{post_id}`. Gated by `public_api_enabled`.
+      tags: [Feeds]
+      responses:
+        "200":
+          description: Atom 1.0 document.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=60"
+          content:
+            application/atom+xml:
+              schema:
+                type: string
+                description: Atom 1.0 XML document.
+        "404":
+          $ref: "#/components/responses/ApiDisabled"
+
 components:
   parameters:
     Slug:
@@ -707,3 +765,4 @@ tags:
   - name: Posts
   - name: Categories
   - name: Tags
+  - name: Feeds
