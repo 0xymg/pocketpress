@@ -62,6 +62,6 @@ Features that serve newsletters, commerce, community, memberships, or help build
 
 ## Current phase
 
-**v0.2 in progress** — slices so far: RSS/Atom feeds (`GET /api/v1/feed.rss`, `GET /api/v1/feed.atom`) and Sitemap (`GET /api/v1/sitemap.xml`).
+**v0.2 in progress** — slices so far: RSS/Atom feeds (`GET /api/v1/feed.rss`, `GET /api/v1/feed.atom`), Sitemap (`GET /api/v1/sitemap.xml`), and JavaScript/TypeScript SDK (`sdk/`, package `@pocketpress/sdk`).
 
-v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02). Remaining v0.2 items from plan §16 (do not skip ahead within a PR): JS/TS SDK, Markdown/Ghost/WP import, FTS, image transforms, webhook filters, API key management.
+v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02). Remaining v0.2 items from plan §16 (do not skip ahead within a PR): Markdown/Ghost/WP import, FTS, image transforms, webhook filters, API key management.

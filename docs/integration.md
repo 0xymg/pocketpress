@@ -2,6 +2,36 @@
 
 PocketPress exposes all published content via a stable `/api/v1` REST API. This guide shows how to fetch and display PocketPress posts from your frontend.
 
+## Official SDK (recommended)
+
+Install `@pocketpress/sdk` (see `sdk/README.md`) for a typed client over the same public API:
+
+```typescript
+import { PocketPress, PocketPressError, verifyWebhookSignature } from "@pocketpress/sdk";
+
+const pp = new PocketPress({
+  baseUrl: process.env.POCKETPRESS_URL ?? "http://localhost:8090",
+});
+
+const { data: posts } = await pp.posts.list({ page: 1, featured: true });
+const { data: post } = await pp.posts.get("hello-world");
+const cover = pp.resolveUrl(post?.cover_image?.url);
+
+// Draft preview (authorized token flow; not gated by public_api_enabled)
+const draft = await pp.posts.preview("draft-slug", previewToken);
+
+// Feed / sitemap URLs or raw XML
+const rssUrl = pp.feeds.rssUrl();
+```
+
+Pass your framework's `fetch` when required (SvelteKit, some Next.js edge setups):
+
+```typescript
+const pp = new PocketPress({ baseUrl: CMS_URL, fetch });
+```
+
+The raw `fetch` examples below remain valid if you prefer not to add a dependency.
+
 ## Fetching posts
 
 ### Next.js (App Router)
@@ -148,31 +178,23 @@ Responses include `Cache-Control: no-store` and are never cached.
 When a post publishes, PocketPress sends a webhook. Verify the signature in your deploy handler:
 
 ```typescript
-// Node.js example
-import crypto from "crypto";
+// Node.js — preferred via the SDK
+import { verifyWebhookSignature } from "@pocketpress/sdk";
 
-export async function handleWebhook(req: any) {
-  const signature = req.headers["x-pocketpress-signature"];
-  const timestamp = req.headers["x-pocketpress-timestamp"];
-  const secret = process.env.POCKETPRESS_WEBHOOK_SECRET;
-
-  const body = req.rawBody; // Raw request body (string)
-  const computed = crypto
-    .createHmac("sha256", secret)
-    .update(timestamp + "." + body)
-    .digest("hex");
-
-  if (
-    !crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from("sha256=" + computed)
-    )
-  ) {
+export async function handleWebhook(req: {
+  headers: Record<string, string | undefined>;
+  rawBody: string;
+}) {
+  const ok = verifyWebhookSignature({
+    signature: req.headers["x-pocketpress-signature"],
+    timestamp: req.headers["x-pocketpress-timestamp"],
+    body: req.rawBody, // exact raw bytes PocketPress signed
+    secret: process.env.POCKETPRESS_WEBHOOK_SECRET!,
+  });
+  if (!ok) {
     throw new Error("Invalid signature");
   }
-
   // Signature verified; trigger your rebuild
-  console.log("Rebuilding site...");
 }
 ```
 
