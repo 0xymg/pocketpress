@@ -18,6 +18,7 @@ PocketPress is a tiny, self-hosted blog backend for product developers. It gives
 - Sitemap XML (`/api/v1/sitemap.xml`)
 - Official JavaScript/TypeScript SDK (`@pocketpress/sdk` in `sdk/`)
 - Import posts from Markdown (YAML frontmatter + Lexical conversion)
+- Import posts from Ghost JSON and WordPress WXR exports
 - Preview tokens for sharing drafts
 - Webhooks for rebuilding your frontend (post.published, post.updated, post.unpublished, post.deleted)
 - Backups (database + local files)
@@ -195,6 +196,28 @@ Optional YAML frontmatter (common aliases accepted):
 | canonical_url | `canonical_url`, `canonical` |
 
 Categories/tags are matched by slugified name and created when missing. `cover_image` / `og_image` media ids are not inferred from URL frontmatter. Bodies convert to Lexical `content_json` + sanitized HTML. Multipart uploads use the `files` field (max 50 docs, 2 MiB each).
+
+## Import from Ghost / WordPress
+
+Authenticated editors can import a full site export from the admin Posts page, or via:
+
+```bash
+# Ghost content export (.json)
+curl -X POST https://cms.example.com/api/admin/v1/posts/import/ghost \
+  -b 'pp_session=...' \
+  -F 'file=@ghost-export.json'
+
+# WordPress WXR export (.xml)
+curl -X POST https://cms.example.com/api/admin/v1/posts/import/wordpress \
+  -b 'pp_session=...' \
+  -F 'file=@wordpress.xml'
+```
+
+Behavior:
+
+- Ghost: JSON export (`db[].data` or bare `posts`/`tags`/`posts_tags`). Only `type=post` rows; pages skipped. Prefer Ghost `lexical` when valid; otherwise HTML → Lexical. Tags via `posts_tags`. Status `published` publishes (and honors `published_at`); `scheduled`/`sent` import as drafts.
+- WordPress: WXR XML. Only `wp:post_type=post`; pages/attachments/trash skipped. `content:encoded` → Lexical; categories/tags from `category` domains; `publish` honors `wp:post_date_gmt`.
+- Feature/cover images are not downloaded. Max 20 MiB / 200 posts per request. Response shape matches Markdown import (`imported` / `failed`), keyed by `source_key` (slug).
 
 ## Webhooks
 

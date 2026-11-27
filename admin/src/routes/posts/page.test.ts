@@ -57,6 +57,8 @@ function routedFetch(overrides: {
 	delete?: () => ReturnType<typeof jsonResponse>;
 	categories?: () => ReturnType<typeof jsonResponse>;
 	importMarkdown?: () => ReturnType<typeof jsonResponse>;
+	importGhost?: () => ReturnType<typeof jsonResponse>;
+	importWordPress?: () => ReturnType<typeof jsonResponse>;
 }) {
 	return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = typeof input === 'string' ? input : input.toString();
@@ -68,6 +70,18 @@ function routedFetch(overrides: {
 		if (method === 'POST' && url.includes('/import/markdown')) {
 			return (
 				overrides.importMarkdown ??
+				(() => jsonResponse(200, true, { imported: [], failed: [] }))
+			)();
+		}
+		if (method === 'POST' && url.includes('/import/ghost')) {
+			return (
+				overrides.importGhost ??
+				(() => jsonResponse(200, true, { imported: [], failed: [] }))
+			)();
+		}
+		if (method === 'POST' && url.includes('/import/wordpress')) {
+			return (
+				overrides.importWordPress ??
 				(() => jsonResponse(200, true, { imported: [], failed: [] }))
 			)();
 		}
@@ -136,7 +150,9 @@ describe('Posts list', () => {
 			expect(screen.getByText('Announcing PocketPress')).toBeInTheDocument();
 		});
 
-		const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+		const fileInput = document.querySelector(
+			'input[type="file"][accept*=".md"]'
+		) as HTMLInputElement;
 		expect(fileInput).toBeTruthy();
 
 		const file = new File(['# Imported\n\nHi.\n'], 'hello.md', { type: 'text/markdown' });
@@ -151,6 +167,82 @@ describe('Posts list', () => {
 				(init as RequestInit | undefined)?.method === 'POST'
 		);
 		expect(calledImport).toBe(true);
+	});
+
+	it('imports a Ghost export and refreshes the list', async () => {
+		const fetchMock = routedFetch({
+			importGhost: () =>
+				jsonResponse(200, true, {
+					imported: [
+						{
+							source_key: 'hello-ghost',
+							post: { ...POST_A, id: 'post-ghost', title: 'Ghost Post' }
+						}
+					],
+					failed: []
+				})
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		render(Page);
+		await waitFor(() => {
+			expect(screen.getByText('Announcing PocketPress')).toBeInTheDocument();
+		});
+
+		const fileInput = document.querySelector(
+			'input[type="file"][accept*=".json"]'
+		) as HTMLInputElement;
+		const file = new File(['{"posts":[]}'], 'ghost.json', { type: 'application/json' });
+		await fireEvent.change(fileInput, { target: { files: [file] } });
+
+		await waitFor(() => {
+			expect(screen.getByText('Imported 1 post from Ghost.')).toBeInTheDocument();
+		});
+		expect(
+			fetchMock.mock.calls.some(
+				([reqUrl, init]) =>
+					String(reqUrl).includes('/posts/import/ghost') &&
+					(init as RequestInit | undefined)?.method === 'POST'
+			)
+		).toBe(true);
+	});
+
+	it('imports a WordPress export and refreshes the list', async () => {
+		const fetchMock = routedFetch({
+			importWordPress: () =>
+				jsonResponse(200, true, {
+					imported: [
+						{
+							source_key: 'hello-wp',
+							post: { ...POST_A, id: 'post-wp', title: 'WP Post' }
+						}
+					],
+					failed: []
+				})
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		render(Page);
+		await waitFor(() => {
+			expect(screen.getByText('Announcing PocketPress')).toBeInTheDocument();
+		});
+
+		const fileInput = document.querySelector(
+			'input[type="file"][accept*=".xml"]'
+		) as HTMLInputElement;
+		const file = new File(['<rss></rss>'], 'wordpress.xml', { type: 'text/xml' });
+		await fireEvent.change(fileInput, { target: { files: [file] } });
+
+		await waitFor(() => {
+			expect(screen.getByText('Imported 1 post from WordPress.')).toBeInTheDocument();
+		});
+		expect(
+			fetchMock.mock.calls.some(
+				([reqUrl, init]) =>
+					String(reqUrl).includes('/posts/import/wordpress') &&
+					(init as RequestInit | undefined)?.method === 'POST'
+			)
+		).toBe(true);
 	});
 
 	it('requests status=draft when the status filter changes', async () => {
