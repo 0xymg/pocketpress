@@ -11,6 +11,7 @@ describe('activeKeyFromPath', () => {
 		['/categories', 'categories'],
 		['/tags', 'tags'],
 		['/media', 'media'],
+		['/settings/profile', 'profile'],
 		['/settings/users', 'users'],
 		['/settings/general', 'settings'],
 		['/settings/webhooks', 'webhooks'],
@@ -46,7 +47,8 @@ describe('NAV_GROUPS', () => {
 			'posts',
 			'categories',
 			'tags',
-			'media'
+			'media',
+			'profile'
 		]);
 
 		expect(system).toBeDefined();

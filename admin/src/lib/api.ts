@@ -33,6 +33,11 @@ export interface User {
 	name: string;
 	email: string;
 	role: UserRole;
+	slug: string;
+	bio: string;
+	website: string;
+	location: string;
+	avatar: string;
 	active: boolean;
 	last_login_at: string | null;
 	created_at: string;
@@ -65,8 +70,23 @@ export interface CreateUserPayload {
 
 export interface UpdateUserPayload {
 	name?: string;
+	slug?: string;
+	bio?: string;
+	website?: string;
+	location?: string;
+	avatar?: string;
 	role?: UserRole;
 	active?: boolean;
+	password?: string;
+}
+
+export interface UpdateProfilePayload {
+	name?: string;
+	slug?: string;
+	bio?: string;
+	website?: string;
+	location?: string;
+	avatar?: string;
 	password?: string;
 }
 
@@ -179,6 +199,14 @@ export function updateUser(id: string, payload: UpdateUserPayload): Promise<{ us
 	});
 }
 
+/** PATCH /auth/me — any signed-in user can edit their own author profile. */
+export function updateProfile(payload: UpdateProfilePayload): Promise<{ user: User }> {
+	return adminFetch<{ user: User }>('/auth/me', {
+		method: 'PATCH',
+		body: JSON.stringify(payload)
+	});
+}
+
 // ---------------------------------------------------------------------------
 // Categories, tags, authors and posts (Phase 3 — plan section 9).
 // ---------------------------------------------------------------------------
@@ -214,6 +242,7 @@ export interface TagPayload {
 export interface Author {
 	id: string;
 	name: string;
+	slug: string;
 }
 
 /** Category/tag reference shape as it appears embedded on a post. */

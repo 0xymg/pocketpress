@@ -18,6 +18,9 @@ const pp = new PocketPress({
 const { data: posts } = await pp.posts.list({ page: 1, featured: true });
 const { data: found } = await pp.posts.list({ q: "release notes" });
 const { data: post } = await pp.posts.get("hello-world");
+const authors = await pp.authors.list();
+const author = await pp.authors.get("yunus");
+const { data: byAuthor } = await pp.authors.listPosts("yunus");
 const cover = pp.resolveUrl(post?.cover_image?.url);
 
 // Draft preview (authorized token flow; not gated by public_api_enabled)

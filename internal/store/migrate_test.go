@@ -23,7 +23,7 @@ func TestUpAppliesInitMigrationAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.Up() error = %v", err)
 	}
-	wantApplied := []string{"0001_init", "0002_media", "0003_fts", "0004_webhook_filters"}
+	wantApplied := []string{"0001_init", "0002_media", "0003_fts", "0004_webhook_filters", "0005_author_profiles"}
 	if len(applied) != len(wantApplied) {
 		t.Fatalf("store.Up() applied = %v, want %v", applied, wantApplied)
 	}
@@ -37,6 +37,8 @@ func TestUpAppliesInitMigrationAndIsIdempotent(t *testing.T) {
 	assertTableExists(t, st, "media")
 	assertTableExists(t, st, "posts_fts")
 	assertColumnExists(t, st, "webhooks", "filters")
+	assertColumnExists(t, st, "users", "slug")
+	assertColumnExists(t, st, "users", "bio")
 
 	appliedAgain, err := store.Up(ctx, st.DB())
 	if err != nil {
@@ -66,19 +68,31 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertTableExists(t, st, "media")
 	assertTableExists(t, st, "posts_fts")
 	assertColumnExists(t, st, "webhooks", "filters")
+	assertColumnExists(t, st, "users", "slug")
 
-	// First Down reverts 0004_webhook_filters only.
+	// First Down reverts 0005_author_profiles only.
 	reverted, err := store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() error = %v", err)
 	}
+	if reverted != "0005_author_profiles" {
+		t.Fatalf("store.Down() reverted = %q, want %q", reverted, "0005_author_profiles")
+	}
+	assertColumnMissing(t, st, "users", "slug")
+	assertColumnExists(t, st, "webhooks", "filters")
+
+	// Second Down reverts 0004_webhook_filters only.
+	reverted, err = store.Down(ctx, st.DB())
+	if err != nil {
+		t.Fatalf("store.Down() (filters) error = %v", err)
+	}
 	if reverted != "0004_webhook_filters" {
-		t.Fatalf("store.Down() reverted = %q, want %q", reverted, "0004_webhook_filters")
+		t.Fatalf("store.Down() (filters) reverted = %q, want %q", reverted, "0004_webhook_filters")
 	}
 	assertColumnMissing(t, st, "webhooks", "filters")
 	assertTableExists(t, st, "posts_fts")
 
-	// Second Down reverts 0003_fts only.
+	// Third Down reverts 0003_fts only.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (fts) error = %v", err)
@@ -90,7 +104,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertTableExists(t, st, "media")
 	assertTableExists(t, st, "posts")
 
-	// Third Down reverts 0002_media only: media goes away, posts (from
+	// Fourth Down reverts 0002_media only: media goes away, posts (from
 	// 0001_init) is untouched.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
@@ -102,7 +116,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertTableMissing(t, st, "media")
 	assertTableExists(t, st, "posts")
 
-	// Fourth Down reverts 0001_init: posts goes away too.
+	// Fifth Down reverts 0001_init: posts goes away too.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (third migration) error = %v", err)
@@ -115,17 +129,17 @@ func TestUpDownUpCycle(t *testing.T) {
 	// Down with nothing left applied is a no-op, not an error.
 	revertedAgain, err := store.Down(ctx, st.DB())
 	if err != nil {
-		t.Fatalf("store.Down() (fifth call) error = %v", err)
+		t.Fatalf("store.Down() (sixth call) error = %v", err)
 	}
 	if revertedAgain != "" {
-		t.Fatalf("store.Down() (fifth call) reverted = %q, want \"\"", revertedAgain)
+		t.Fatalf("store.Down() (sixth call) reverted = %q, want \"\"", revertedAgain)
 	}
 
 	appliedAgain, err := store.Up(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Up() (after down) error = %v", err)
 	}
-	wantAgain := []string{"0001_init", "0002_media", "0003_fts", "0004_webhook_filters"}
+	wantAgain := []string{"0001_init", "0002_media", "0003_fts", "0004_webhook_filters", "0005_author_profiles"}
 	if len(appliedAgain) != len(wantAgain) {
 		t.Fatalf("store.Up() (after down) applied = %v, want %v", appliedAgain, wantAgain)
 	}
@@ -138,6 +152,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertTableExists(t, st, "media")
 	assertTableExists(t, st, "posts_fts")
 	assertColumnExists(t, st, "webhooks", "filters")
+	assertColumnExists(t, st, "users", "slug")
 }
 
 func assertTableExists(t *testing.T, st *store.Store, name string) {

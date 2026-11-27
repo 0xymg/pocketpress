@@ -15,6 +15,11 @@ const OWNER = {
 	name: 'Ada Lovelace',
 	email: 'ada@example.com',
 	role: 'owner' as const,
+	slug: 'ada-lovelace',
+	bio: '',
+	website: '',
+	location: '',
+	avatar: '',
 	active: true,
 	last_login_at: null,
 	created_at: '2024-01-01T00:00:00Z'
@@ -42,7 +47,7 @@ const REFERENCE_BODIES = {
 			{ id: 'tag-1', name: 'Launch', slug: 'launch', created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' }
 		]
 	},
-	authors: { authors: [{ id: 'author-1', name: 'Ada Lovelace' }] }
+	authors: { authors: [{ id: 'author-1', name: 'Ada Lovelace', slug: 'ada-lovelace' }] }
 };
 
 const EXISTING_POST = {
@@ -52,7 +57,7 @@ const EXISTING_POST = {
 	status: 'draft' as const,
 	excerpt: 'An excerpt',
 	featured: false,
-	author: { id: 'author-1', name: 'Ada Lovelace' },
+	author: { id: 'author-1', name: 'Ada Lovelace', slug: 'ada-lovelace' },
 	categories: [],
 	tags: [],
 	scheduled_for: null,

@@ -162,6 +162,98 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	h.writeUser(w, http.StatusOK, user)
 }
 
+// updateMe (PATCH /auth/me, authenticated) lets any signed-in user edit
+// their own profile (name, slug, bio, website, location, avatar, password).
+// Role and active status are owner-only via PATCH /users/{id}.
+func (h *Handler) updateMe(w http.ResponseWriter, r *http.Request) {
+	user, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		middleware.WriteError(w, http.StatusUnauthorized, "unauthorized", "Authentication required.")
+		return
+	}
+
+	var req profilePatchBody
+	if !h.decode(w, r, &req) {
+		return
+	}
+	fields := validateProfilePatch(req)
+	if len(fields) > 0 {
+		h.validationError(w, fields)
+		return
+	}
+
+	updated, err := h.svc.UpdateUser(r.Context(), user.ID, auth.UpdateUserInput{
+		Name:     req.Name,
+		Slug:     req.Slug,
+		Bio:      req.Bio,
+		Website:  req.Website,
+		Location: req.Location,
+		Avatar:   req.Avatar,
+		Password: req.Password,
+	})
+	switch {
+	case errors.Is(err, auth.ErrSlugTaken):
+		h.validationError(w, map[string]string{"slug": "This author slug is already in use."})
+		return
+	case errors.Is(err, store.ErrNotFound):
+		// Avatar media id missing, or the session user vanished.
+		if req.Avatar != nil && *req.Avatar != "" {
+			h.validationError(w, map[string]string{"avatar": "Avatar media was not found."})
+			return
+		}
+		middleware.WriteError(w, http.StatusNotFound, "not_found", "User not found.")
+		return
+	case err != nil:
+		h.serverError(w, err)
+		return
+	}
+
+	h.writeUser(w, http.StatusOK, updated)
+}
+
+// profilePatchBody is the shared PATCH shape for self-profile and (with
+// role/active) owner user updates.
+type profilePatchBody struct {
+	Name     *string `json:"name"`
+	Slug     *string `json:"slug"`
+	Bio      *string `json:"bio"`
+	Website  *string `json:"website"`
+	Location *string `json:"location"`
+	Avatar   *string `json:"avatar"`
+	Password *string `json:"password"`
+}
+
+const (
+	bioMaxLen      = 500
+	locationMaxLen = 100
+)
+
+func validateProfilePatch(req profilePatchBody) map[string]string {
+	fields := map[string]string{}
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		fields["name"] = "Name cannot be empty."
+	}
+	if req.Slug != nil {
+		slug := strings.TrimSpace(*req.Slug)
+		if slug == "" {
+			fields["slug"] = "Author slug cannot be empty."
+		}
+	}
+	if req.Bio != nil && len([]rune(*req.Bio)) > bioMaxLen {
+		fields["bio"] = "Bio must be at most 500 characters."
+	}
+	if req.Location != nil && len([]rune(*req.Location)) > locationMaxLen {
+		fields["location"] = "Location must be at most 100 characters."
+	}
+	if req.Website != nil && strings.TrimSpace(*req.Website) != "" && !isValidHTTPURL(strings.TrimSpace(*req.Website)) {
+		fields["website"] = "Website must be a valid http(s) URL."
+	}
+	if req.Password != nil && len(*req.Password) < minPasswordLen {
+		fields["password"] = "Password must be at least 10 characters."
+	}
+	return fields
+}
+
 // listUsers (GET /users, owner only) returns every user, oldest first, as
 // {"users": [USER]}.
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
@@ -238,24 +330,17 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	var req struct {
-		Name     *string `json:"name"`
-		Role     *string `json:"role"`
-		Active   *bool   `json:"active"`
-		Password *string `json:"password"`
+		profilePatchBody
+		Role   *string `json:"role"`
+		Active *bool   `json:"active"`
 	}
 	if !h.decode(w, r, &req) {
 		return
 	}
 
-	fields := map[string]string{}
-	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
-		fields["name"] = "Name cannot be empty."
-	}
+	fields := validateProfilePatch(req.profilePatchBody)
 	if req.Role != nil && !isValidRole(*req.Role) {
 		fields["role"] = "Role must be either 'owner' or 'editor'."
-	}
-	if req.Password != nil && len(*req.Password) < minPasswordLen {
-		fields["password"] = "Password must be at least 10 characters."
 	}
 	if len(fields) > 0 {
 		h.validationError(w, fields)
@@ -264,12 +349,24 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.svc.UpdateUser(r.Context(), id, auth.UpdateUserInput{
 		Name:     req.Name,
+		Slug:     req.Slug,
+		Bio:      req.Bio,
+		Website:  req.Website,
+		Location: req.Location,
+		Avatar:   req.Avatar,
 		Role:     req.Role,
 		Active:   req.Active,
 		Password: req.Password,
 	})
 	switch {
+	case errors.Is(err, auth.ErrSlugTaken):
+		h.validationError(w, map[string]string{"slug": "This author slug is already in use."})
+		return
 	case errors.Is(err, store.ErrNotFound):
+		if req.Avatar != nil && *req.Avatar != "" {
+			h.validationError(w, map[string]string{"avatar": "Avatar media was not found."})
+			return
+		}
 		middleware.WriteError(w, http.StatusNotFound, "not_found", "User not found.")
 		return
 	case errors.Is(err, auth.ErrLastOwner):

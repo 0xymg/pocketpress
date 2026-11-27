@@ -80,6 +80,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	requireUser := middleware.RequireUser(h.svc)
 	mux.Handle("GET /api/admin/v1/auth/me", requireUser(http.HandlerFunc(h.me)))
+	mux.Handle("PATCH /api/admin/v1/auth/me", requireUser(http.HandlerFunc(h.updateMe)))
 
 	owner := func(next http.HandlerFunc) http.Handler {
 		return requireUser(middleware.RequireOwner()(next))
@@ -170,6 +171,11 @@ type userDTO struct {
 	Name        string     `json:"name"`
 	Email       string     `json:"email"`
 	Role        string     `json:"role"`
+	Slug        string     `json:"slug"`
+	Bio         string     `json:"bio"`
+	Website     string     `json:"website"`
+	Location    string     `json:"location"`
+	Avatar      string     `json:"avatar"`
 	Active      bool       `json:"active"`
 	LastLoginAt *time.Time `json:"last_login_at"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -181,6 +187,11 @@ func toUserDTO(u store.User) userDTO {
 		Name:        u.Name,
 		Email:       u.Email,
 		Role:        u.Role,
+		Slug:        u.Slug,
+		Bio:         u.Bio,
+		Website:     u.Website,
+		Location:    u.Location,
+		Avatar:      u.Avatar,
 		Active:      u.Active,
 		LastLoginAt: u.LastLoginAt,
 		CreatedAt:   u.CreatedAt,

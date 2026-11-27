@@ -23,7 +23,11 @@ type User struct {
 	PasswordHash string
 	Name         string
 	Role         string
-	Avatar       string // "" means unset (NULL in storage)
+	Slug         string // public author slug; unique
+	Bio          string // "" means unset (NULL in storage)
+	Website      string // "" means unset (NULL in storage)
+	Location     string // "" means unset (NULL in storage)
+	Avatar       string // media id; "" means unset (NULL in storage)
 	Active       bool
 	LastLoginAt  *time.Time // nil means never logged in (NULL in storage)
 	CreatedAt    time.Time
@@ -34,28 +38,44 @@ type User struct {
 // CreatedAt, UpdatedAt and Active are set by CreateUser itself: Active is
 // always true for a newly created user (deactivate afterwards via
 // SetUserActive), matching the users.active DEFAULT in the schema.
+//
+// Slug must be unique among users; the auth layer generates a name-based
+// slug (falling back to the new id when the name is not sluggable).
 type NewUser struct {
 	Email        string
 	PasswordHash string
 	Name         string
 	Role         string
+	Slug         string
+	Bio          string
+	Website      string
+	Location     string
 	Avatar       string
 }
+
+const userSelectColumns = `id, email, password_hash, name, role, slug, bio, website, location, avatar, active, last_login_at, created_at, updated_at`
 
 // CreateUser inserts a new user and returns the row as stored, including
 // the generated ID and timestamps.
 //
 // A duplicate email (case-insensitive, per the users.email COLLATE NOCASE
-// UNIQUE constraint) returns the underlying SQLite constraint error
-// unwrapped; callers that need to distinguish "email already taken" from
-// other failures should check for that constraint by message or rely on a
-// pre-flight GetUserByEmail — this package does not layer a sentinel error
-// on top of the raw SQLite error here, to avoid hiding which constraint
-// fired.
+// UNIQUE constraint) or duplicate slug returns the underlying SQLite
+// constraint error unwrapped; callers that need to distinguish "email
+// already taken" from other failures should check for that constraint by
+// message or rely on a pre-flight GetUserByEmail — this package does not
+// layer a sentinel error on top of the raw SQLite error here, to avoid
+// hiding which constraint fired.
 func CreateUser(ctx context.Context, db *sql.DB, in NewUser) (User, error) {
 	id, err := newID()
 	if err != nil {
 		return User{}, err
+	}
+
+	slug := in.Slug
+	if slug == "" {
+		// Last-resort unique slug when the caller did not supply one
+		// (tests, migrations). Prefer a name-based slug from the auth layer.
+		slug = id
 	}
 
 	now := time.Now().UTC()
@@ -65,6 +85,10 @@ func CreateUser(ctx context.Context, db *sql.DB, in NewUser) (User, error) {
 		PasswordHash: in.PasswordHash,
 		Name:         in.Name,
 		Role:         in.Role,
+		Slug:         slug,
+		Bio:          in.Bio,
+		Website:      in.Website,
+		Location:     in.Location,
 		Avatar:       in.Avatar,
 		Active:       true,
 		CreatedAt:    now,
@@ -72,9 +96,13 @@ func CreateUser(ctx context.Context, db *sql.DB, in NewUser) (User, error) {
 	}
 
 	_, err = db.ExecContext(ctx, `
-		INSERT INTO users (id, email, password_hash, name, role, avatar, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		u.ID, u.Email, u.PasswordHash, u.Name, u.Role, nullString(u.Avatar), boolToInt(u.Active),
+		INSERT INTO users (
+			id, email, password_hash, name, role, slug, bio, website, location,
+			avatar, active, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		u.ID, u.Email, u.PasswordHash, u.Name, u.Role, u.Slug,
+		nullString(u.Bio), nullString(u.Website), nullString(u.Location),
+		nullString(u.Avatar), boolToInt(u.Active),
 		formatTime(u.CreatedAt), formatTime(u.UpdatedAt),
 	)
 	if err != nil {
@@ -89,7 +117,7 @@ func CreateUser(ctx context.Context, db *sql.DB, in NewUser) (User, error) {
 // COLLATE NOCASE. Returns ErrNotFound if no user has that email.
 func GetUserByEmail(ctx context.Context, db *sql.DB, email string) (User, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT id, email, password_hash, name, role, avatar, active, last_login_at, created_at, updated_at
+		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE email = ?`,
 		email,
@@ -101,12 +129,44 @@ func GetUserByEmail(ctx context.Context, db *sql.DB, email string) (User, error)
 // exists.
 func GetUserByID(ctx context.Context, db *sql.DB, id string) (User, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT id, email, password_hash, name, role, avatar, active, last_login_at, created_at, updated_at
+		SELECT `+userSelectColumns+`
 		FROM users
 		WHERE id = ?`,
 		id,
 	)
 	return scanUser(row)
+}
+
+// GetUserBySlug looks up a user by public author slug. Returns ErrNotFound
+// if no such user exists.
+func GetUserBySlug(ctx context.Context, db *sql.DB, slug string) (User, error) {
+	row := db.QueryRowContext(ctx, `
+		SELECT `+userSelectColumns+`
+		FROM users
+		WHERE slug = ?`,
+		slug,
+	)
+	return scanUser(row)
+}
+
+// UserSlugExists reports whether any user (other than excludeID, when
+// non-empty) already owns the given slug.
+func UserSlugExists(ctx context.Context, db *sql.DB, slug, excludeID string) (bool, error) {
+	var n int
+	var err error
+	if excludeID == "" {
+		err = db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM users WHERE slug = ?`, slug,
+		).Scan(&n)
+	} else {
+		err = db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM users WHERE slug = ? AND id != ?`, slug, excludeID,
+		).Scan(&n)
+	}
+	if err != nil {
+		return false, fmt.Errorf("user slug exists: %w", err)
+	}
+	return n > 0, nil
 }
 
 // UpdateUserLastLogin sets last_login_at for the given user to when.
@@ -148,6 +208,37 @@ func SetUserName(ctx context.Context, db *sql.DB, id, name string) error {
 	return requireRowsAffected(res)
 }
 
+// SetUserSlug updates a user's public author slug (and bumps updated_at).
+// Returns ErrNotFound if no such user exists. A slug collision surfaces as
+// the underlying SQLite UNIQUE constraint error.
+func SetUserSlug(ctx context.Context, db *sql.DB, id, slug string) error {
+	res, err := db.ExecContext(ctx,
+		`UPDATE users SET slug = ?, updated_at = ? WHERE id = ?`,
+		slug, formatTime(time.Now().UTC()), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update user slug: %w", err)
+	}
+	return requireRowsAffected(res)
+}
+
+// SetUserProfile updates the public profile fields bio, website, location
+// and avatar (and bumps updated_at). Empty strings clear the columns
+// (stored as NULL). Returns ErrNotFound if no such user exists.
+func SetUserProfile(ctx context.Context, db *sql.DB, id, bio, website, location, avatar string) error {
+	res, err := db.ExecContext(ctx, `
+		UPDATE users
+		SET bio = ?, website = ?, location = ?, avatar = ?, updated_at = ?
+		WHERE id = ?`,
+		nullString(bio), nullString(website), nullString(location), nullString(avatar),
+		formatTime(time.Now().UTC()), id,
+	)
+	if err != nil {
+		return fmt.Errorf("update user profile: %w", err)
+	}
+	return requireRowsAffected(res)
+}
+
 // SetUserRole updates a user's role (and bumps updated_at). The role must
 // be one of the values allowed by the users.role CHECK constraint
 // (RoleOwner, RoleEditor); an invalid role surfaces as the underlying
@@ -182,7 +273,7 @@ func SetUserPasswordHash(ctx context.Context, db *sql.DB, id, passwordHash strin
 // i.e. the owner created during setup sorts first).
 func ListUsers(ctx context.Context, db *sql.DB) ([]User, error) {
 	rows, err := db.QueryContext(ctx, `
-		SELECT id, email, password_hash, name, role, avatar, active, last_login_at, created_at, updated_at
+		SELECT `+userSelectColumns+`
 		FROM users
 		ORDER BY created_at ASC`,
 	)
@@ -233,6 +324,9 @@ func scanUser(row rowScanner) (User, error) {
 func scanUserRow(row rowScanner) (User, error) {
 	var (
 		u           User
+		bio         sql.NullString
+		website     sql.NullString
+		location    sql.NullString
 		avatar      sql.NullString
 		active      int
 		lastLoginAt sql.NullString
@@ -240,7 +334,10 @@ func scanUserRow(row rowScanner) (User, error) {
 		updatedAt   string
 	)
 
-	err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &avatar, &active, &lastLoginAt, &createdAt, &updatedAt)
+	err := row.Scan(
+		&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Role, &u.Slug,
+		&bio, &website, &location, &avatar, &active, &lastLoginAt, &createdAt, &updatedAt,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -248,6 +345,9 @@ func scanUserRow(row rowScanner) (User, error) {
 		return User{}, fmt.Errorf("scan user: %w", err)
 	}
 
+	u.Bio = stringOrEmpty(bio)
+	u.Website = stringOrEmpty(website)
+	u.Location = stringOrEmpty(location)
 	u.Avatar = stringOrEmpty(avatar)
 	u.Active = active != 0
 

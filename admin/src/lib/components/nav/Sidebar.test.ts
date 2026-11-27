@@ -14,6 +14,11 @@ const OWNER = {
 	name: 'Ada Lovelace',
 	email: 'ada@example.com',
 	role: 'owner' as const,
+	slug: 'ada-lovelace',
+	bio: '',
+	website: '',
+	location: '',
+	avatar: '',
 	active: true,
 	last_login_at: null,
 	created_at: '2024-01-01T00:00:00Z'
@@ -24,6 +29,11 @@ const EDITOR = {
 	name: 'Grace Hopper',
 	email: 'grace@example.com',
 	role: 'editor' as const,
+	slug: 'grace-hopper',
+	bio: '',
+	website: '',
+	location: '',
+	avatar: '',
 	active: true,
 	last_login_at: null,
 	created_at: '2024-01-01T00:00:00Z'
@@ -49,7 +59,8 @@ describe('Sidebar', () => {
 			['Posts', '/posts'],
 			['Categories', '/categories'],
 			['Tags', '/tags'],
-			['Media', '/media']
+			['Media', '/media'],
+			['Profile', '/settings/profile']
 		] as const) {
 			expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
 		}

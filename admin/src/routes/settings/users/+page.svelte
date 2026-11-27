@@ -145,6 +145,7 @@
 								<thead>
 									<tr class="border-b border-stone-200 text-stone-500">
 										<th class="py-2 pr-4 font-medium">Name</th>
+										<th class="py-2 pr-4 font-medium">Slug</th>
 										<th class="py-2 pr-4 font-medium">Email</th>
 										<th class="py-2 pr-4 font-medium">Role</th>
 										<th class="py-2 pr-4 font-medium">Active</th>
@@ -156,6 +157,7 @@
 									{#each users as user (user.id)}
 										<tr class="border-b border-stone-100 align-top">
 											<td class="py-2 pr-4 text-stone-900">{user.name}</td>
+											<td class="py-2 pr-4 text-stone-600">{user.slug}</td>
 											<td class="py-2 pr-4 text-stone-600">{user.email}</td>
 											<td class="py-2 pr-4">
 												<select
@@ -190,7 +192,7 @@
 										</tr>
 										{#if rowErrors[user.id]}
 											<tr>
-												<td colspan="6" class="pb-2 text-xs text-destructive">{rowErrors[user.id]}</td>
+												<td colspan="7" class="pb-2 text-xs text-destructive">{rowErrors[user.id]}</td>
 											</tr>
 										{/if}
 									{/each}

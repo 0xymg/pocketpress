@@ -4,9 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/pocketpress/pocketpress/internal/content"
 	"github.com/pocketpress/pocketpress/internal/store"
 )
 
@@ -26,6 +30,10 @@ var (
 	// ErrEmailTaken is returned by CreateUser when another user already
 	// has the requested email.
 	ErrEmailTaken = errors.New("auth: email already in use")
+
+	// ErrSlugTaken is returned when an author slug already belongs to
+	// another user.
+	ErrSlugTaken = errors.New("auth: author slug already in use")
 
 	// ErrLastOwner is returned by UpdateUser when a change would deactivate
 	// or demote the last remaining active owner.
@@ -99,11 +107,17 @@ func (s *Service) Setup(ctx context.Context, in SetupInput) (store.User, string,
 		return store.User{}, "", err
 	}
 
+	slug, err := s.uniqueAuthorSlug(ctx, in.OwnerName, "")
+	if err != nil {
+		return store.User{}, "", err
+	}
+
 	owner, err := store.CreateUser(ctx, s.db, store.NewUser{
 		Email:        in.OwnerEmail,
 		PasswordHash: hash,
 		Name:         in.OwnerName,
 		Role:         store.RoleOwner,
+		Slug:         slug,
 	})
 	if err != nil {
 		return store.User{}, "", err
@@ -240,11 +254,17 @@ func (s *Service) CreateUser(ctx context.Context, in NewUserInput) (store.User, 
 		return store.User{}, err
 	}
 
+	slug, err := s.uniqueAuthorSlug(ctx, in.Name, "")
+	if err != nil {
+		return store.User{}, err
+	}
+
 	user, err := store.CreateUser(ctx, s.db, store.NewUser{
 		Email:        in.Email,
 		PasswordHash: hash,
 		Name:         in.Name,
 		Role:         in.Role,
+		Slug:         slug,
 	})
 	if err != nil {
 		return store.User{}, err
@@ -256,9 +276,14 @@ func (s *Service) CreateUser(ctx context.Context, in NewUserInput) (store.User, 
 
 // UpdateUserInput is a partial update: each non-nil field is applied, each
 // nil field is left unchanged. It mirrors the PATCH body's optional
-// name/role/active/password fields.
+// name/role/active/password/profile fields.
 type UpdateUserInput struct {
 	Name     *string
+	Slug     *string
+	Bio      *string
+	Website  *string
+	Location *string
+	Avatar   *string // media id; pointer to "" clears
 	Role     *string
 	Active   *bool
 	Password *string
@@ -269,7 +294,8 @@ type UpdateUserInput struct {
 // It enforces the last-active-owner guard: if the target is currently the
 // only active owner, a change that would deactivate it or demote it from
 // owner returns ErrLastOwner and nothing is modified. It returns
-// store.ErrNotFound if no such user exists.
+// store.ErrNotFound if no such user exists, or ErrSlugTaken on a slug
+// collision.
 func (s *Service) UpdateUser(ctx context.Context, id string, in UpdateUserInput) (store.User, error) {
 	user, err := store.GetUserByID(ctx, s.db, id)
 	if err != nil {
@@ -292,6 +318,45 @@ func (s *Service) UpdateUser(ctx context.Context, id string, in UpdateUserInput)
 
 	if in.Name != nil {
 		if err := store.SetUserName(ctx, s.db, id, *in.Name); err != nil {
+			return store.User{}, err
+		}
+	}
+	if in.Slug != nil {
+		slug := content.Slugify(*in.Slug)
+		if slug == "" {
+			return store.User{}, fmt.Errorf("auth: author slug is required")
+		}
+		taken, err := store.UserSlugExists(ctx, s.db, slug, id)
+		if err != nil {
+			return store.User{}, err
+		}
+		if taken {
+			return store.User{}, ErrSlugTaken
+		}
+		if err := store.SetUserSlug(ctx, s.db, id, slug); err != nil {
+			return store.User{}, err
+		}
+	}
+	if in.Bio != nil || in.Website != nil || in.Location != nil || in.Avatar != nil {
+		bio, website, location, avatar := user.Bio, user.Website, user.Location, user.Avatar
+		if in.Bio != nil {
+			bio = strings.TrimSpace(*in.Bio)
+		}
+		if in.Website != nil {
+			website = strings.TrimSpace(*in.Website)
+		}
+		if in.Location != nil {
+			location = strings.TrimSpace(*in.Location)
+		}
+		if in.Avatar != nil {
+			avatar = strings.TrimSpace(*in.Avatar)
+			if avatar != "" {
+				if _, err := store.GetMediaByID(ctx, s.db, avatar); err != nil {
+					return store.User{}, err
+				}
+			}
+		}
+		if err := store.SetUserProfile(ctx, s.db, id, bio, website, location, avatar); err != nil {
 			return store.User{}, err
 		}
 	}
@@ -321,6 +386,38 @@ func (s *Service) UpdateUser(ctx context.Context, id string, in UpdateUserInput)
 	}
 	s.logger.Info("admin user updated", slog.String("user_id", id))
 	return updated, nil
+}
+
+// uniqueAuthorSlug returns a free author slug derived from name. When name
+// yields an empty slug, excludeID (or a fixed "author" base) seeds the
+// candidate. Collisions append "-2", "-3", …
+func (s *Service) uniqueAuthorSlug(ctx context.Context, name, excludeID string) (string, error) {
+	base := content.Slugify(name)
+	if base == "" {
+		base = "author"
+	}
+	for i := 1; ; i++ {
+		candidate := base
+		if i > 1 {
+			suffix := "-" + strconv.Itoa(i)
+			maxBase := content.MaxSlugLen - len(suffix)
+			if maxBase < 0 {
+				maxBase = 0
+			}
+			candidate = strings.TrimRight(base, "-")
+			if len(candidate) > maxBase {
+				candidate = strings.TrimRight(candidate[:maxBase], "-")
+			}
+			candidate += suffix
+		}
+		taken, err := store.UserSlugExists(ctx, s.db, candidate, excludeID)
+		if err != nil {
+			return "", err
+		}
+		if !taken {
+			return candidate, nil
+		}
+	}
 }
 
 // activeOwnerCount counts users that are both owners and active. The store

@@ -45,6 +45,11 @@ describe('Login page', () => {
 					name: 'Ada Lovelace',
 					email: 'ada@example.com',
 					role: 'owner',
+					slug: 'ada-lovelace',
+					bio: '',
+					website: '',
+					location: '',
+					avatar: '',
 					active: true,
 					last_login_at: null,
 					created_at: '2024-01-01T00:00:00Z'

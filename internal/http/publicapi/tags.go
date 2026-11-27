@@ -57,7 +57,12 @@ func (h *Handler) tagPosts(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
-	if !catOK {
+	authorID, authorOK, err := h.resolveAuthorFilter(r.Context(), q.Get("author"))
+	if err != nil {
+		h.serverError(w, err)
+		return
+	}
+	if !catOK || !authorOK {
 		h.writePostList(w, r, nil, parsePage(q), parsePerPage(q), 0)
 		return
 	}
@@ -68,7 +73,7 @@ func (h *Handler) tagPosts(w http.ResponseWriter, r *http.Request) {
 		CategoryID: catID,
 		TagID:      tg.ID,
 		Featured:   parseFeatured(q.Get("featured")),
-		AuthorID:   q.Get("author"),
+		AuthorID:   authorID,
 		Search:     q.Get("q"),
 	}
 	query.Sort, query.SortDesc = parseSort(q.Get("sort"))

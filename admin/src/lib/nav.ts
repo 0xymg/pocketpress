@@ -14,6 +14,7 @@ export type NavKey =
 	| 'categories'
 	| 'tags'
 	| 'media'
+	| 'profile'
 	| 'users'
 	| 'settings'
 	| 'webhooks'
@@ -47,7 +48,8 @@ export const NAV_GROUPS: NavGroup[] = [
 			{ key: 'posts', href: '/posts', label: 'Posts' },
 			{ key: 'categories', href: '/categories', label: 'Categories' },
 			{ key: 'tags', href: '/tags', label: 'Tags' },
-			{ key: 'media', href: '/media', label: 'Media' }
+			{ key: 'media', href: '/media', label: 'Media' },
+			{ key: 'profile', href: '/settings/profile', label: 'Profile' }
 		]
 	},
 	{
@@ -73,6 +75,7 @@ export function activeKeyFromPath(pathname: string): NavKey | null {
 	if (pathname.startsWith('/categories')) return 'categories';
 	if (pathname.startsWith('/tags')) return 'tags';
 	if (pathname.startsWith('/media')) return 'media';
+	if (pathname.startsWith('/settings/profile')) return 'profile';
 	if (pathname.startsWith('/settings/users')) return 'users';
 	if (pathname.startsWith('/settings/general')) return 'settings';
 	if (pathname.startsWith('/settings/webhooks')) return 'webhooks';

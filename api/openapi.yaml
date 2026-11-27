@@ -3,10 +3,10 @@ info:
   title: PocketPress Public API
   version: "1"
   summary: >-
-    PocketPress's versioned content API. Read-only: posts, categories and
-    tags. Only ever returns published content — see the visibility rule
-    documented on GET /api/v1/posts/{slug}. Optionally authenticated with
-    Bearer API keys for private access.
+    PocketPress's versioned content API. Read-only: posts, categories, tags
+    and authors. Only ever returns published content — see the visibility
+    rule documented on GET /api/v1/posts/{slug}. Optionally authenticated
+    with Bearer API keys for private access.
   description: >-
     Most `/api/v1/*` responses are `Content-Type: application/json` with an
     `X-Content-Type-Options: nosniff` header. Syndication feeds return XML
@@ -367,6 +367,109 @@ paths:
                     error:
                       code: category_not_found
                       message: The requested category was not found.
+                      details: null
+                api_disabled:
+                  $ref: "#/components/examples/ApiDisabledError"
+
+  /api/v1/authors:
+    get:
+      operationId: listAuthors
+      summary: List active authors
+      description: >-
+        Returns every active user's public author profile. Inactive users
+        are omitted.
+      security:
+        - {}
+        - ApiKeyBearer: []
+      tags: [Authors]
+      responses:
+        "200":
+          description: Every active author.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=60"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Author"
+        "404":
+          $ref: "#/components/responses/ApiDisabled"
+
+  /api/v1/authors/{slug}:
+    get:
+      operationId: getAuthorBySlug
+      summary: Get an author by slug
+      tags: [Authors]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+      responses:
+        "200":
+          description: The author.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Author"
+        "404":
+          description: No such author (unknown slug or inactive user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                author_not_found:
+                  value:
+                    error:
+                      code: author_not_found
+                      message: The requested author was not found.
+                      details: null
+                api_disabled:
+                  $ref: "#/components/examples/ApiDisabledError"
+
+  /api/v1/authors/{slug}/posts:
+    get:
+      operationId: listAuthorPosts
+      summary: List published posts by an author
+      description: >-
+        Same filtered/sorted/paginated shape as GET /api/v1/posts, scoped to
+        this author. Any `author` query parameter is ignored — the path
+        slug is authoritative.
+      tags: [Authors, Posts]
+      parameters:
+        - $ref: "#/components/parameters/Slug"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/CategoryFilter"
+        - $ref: "#/components/parameters/TagFilter"
+        - $ref: "#/components/parameters/FeaturedFilter"
+        - $ref: "#/components/parameters/SortFilter"
+        - $ref: "#/components/parameters/SearchQuery"
+      responses:
+        "200":
+          $ref: "#/components/responses/PostList"
+        "404":
+          description: No such author.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+              examples:
+                author_not_found:
+                  value:
+                    error:
+                      code: author_not_found
+                      message: The requested author was not found.
                       details: null
                 api_disabled:
                   $ref: "#/components/examples/ApiDisabledError"
@@ -747,7 +850,7 @@ components:
       name: author
       in: query
       required: false
-      description: Restrict to posts by this author's user id.
+      description: Restrict to posts by this author's user id or public author slug.
       schema:
         type: string
     SortFilter:
@@ -830,12 +933,30 @@ components:
 
     Author:
       type: object
-      required: [id, name]
+      description: >-
+        Public author profile. Never includes email, role, or other
+        admin-only fields.
+      required: [id, name, slug, bio, website, location, avatar]
       properties:
         id:
           type: string
         name:
           type: string
+        slug:
+          type: string
+          description: Unique public author slug.
+        bio:
+          type: [string, "null"]
+        website:
+          type: [string, "null"]
+          description: Absolute http(s) URL, or null.
+        location:
+          type: [string, "null"]
+        avatar:
+          type: [string, "null"]
+          description: >-
+            Relative file URL of the author's avatar
+            (`/api/files/{id}/{filename}`), or null.
 
     Term:
       type: object
@@ -981,6 +1102,8 @@ tags:
   - name: Posts
   - name: Categories
   - name: Tags
+  - name: Authors
+    description: Public author profiles for multi-author blogs.
   - name: Feeds
     description: RSS/Atom syndication feeds and Sitemap XML.
   - name: Files

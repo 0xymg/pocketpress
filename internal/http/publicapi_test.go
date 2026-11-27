@@ -637,8 +637,16 @@ func TestPublicPostSerializerShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("data.author is not an object: %s", raw)
 	}
-	if len(author) != 2 || author["id"] == nil || author["name"] == nil {
-		t.Fatalf("data.author = %v, want exactly {id,name}", author)
+	for _, k := range []string{"id", "name", "slug", "bio", "website", "location", "avatar"} {
+		if _, ok := author[k]; !ok {
+			t.Fatalf("data.author missing %q: %v", k, author)
+		}
+	}
+	if len(author) != 7 {
+		t.Fatalf("data.author = %v, want exactly {id,name,slug,bio,website,location,avatar}", author)
+	}
+	if author["slug"] == nil || author["slug"] == "" {
+		t.Fatalf("data.author.slug empty: %v", author)
 	}
 	if _, ok := author["email"]; ok {
 		t.Fatalf("data.author leaks email: %s", raw)
@@ -780,6 +788,9 @@ func TestPublicAPIDisabled(t *testing.T) {
 		"/api/v1/tags",
 		"/api/v1/tags/whatever",
 		"/api/v1/tags/whatever/posts",
+		"/api/v1/authors",
+		"/api/v1/authors/whatever",
+		"/api/v1/authors/whatever/posts",
 		"/api/v1/feed.rss",
 		"/api/v1/feed.atom",
 		"/api/v1/sitemap.xml",

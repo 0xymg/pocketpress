@@ -56,7 +56,7 @@ func (s *Service) ListPublicPosts(ctx context.Context, q PublicPostListQuery) (P
 		return PostListResult{}, err
 	}
 
-	authorCache := map[string]store.User{}
+	authorCache := map[string]Author{}
 	posts := make([]Post, 0, len(rows))
 	for _, row := range rows {
 		p, err := s.hydrate(ctx, row, authorCache)
