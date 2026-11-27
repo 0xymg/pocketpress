@@ -7,10 +7,12 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/spf13/cobra v1.10.2
+	github.com/yuin/goldmark v1.7.13
 	golang.org/x/crypto v0.54.0
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.56.0
 	golang.org/x/text v0.40.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.55.0
 )
 

@@ -56,6 +56,7 @@ function routedFetch(overrides: {
 	duplicate?: () => ReturnType<typeof jsonResponse>;
 	delete?: () => ReturnType<typeof jsonResponse>;
 	categories?: () => ReturnType<typeof jsonResponse>;
+	importMarkdown?: () => ReturnType<typeof jsonResponse>;
 }) {
 	return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = typeof input === 'string' ? input : input.toString();
@@ -63,6 +64,12 @@ function routedFetch(overrides: {
 
 		if (url.startsWith('/api/admin/v1/categories')) {
 			return (overrides.categories ?? (() => jsonResponse(200, true, { categories: [] })))();
+		}
+		if (method === 'POST' && url.includes('/import/markdown')) {
+			return (
+				overrides.importMarkdown ??
+				(() => jsonResponse(200, true, { imported: [], failed: [] }))
+			)();
 		}
 		if (method === 'POST' && url.includes('/duplicate')) {
 			return (overrides.duplicate ?? (() => jsonResponse(201, true, { post: POST_A })))();
@@ -112,6 +119,38 @@ describe('Posts list', () => {
 			expect(screen.getByText('Announcing PocketPress')).toBeInTheDocument();
 		});
 		expect(screen.getByRole('link', { name: 'New post' })).toHaveAttribute('href', '/posts/new');
+	});
+
+	it('imports Markdown files and refreshes the list', async () => {
+		const fetchMock = routedFetch({
+			importMarkdown: () =>
+				jsonResponse(200, true, {
+					imported: [{ filename: 'hello.md', post: { ...POST_A, id: 'post-imported', title: 'Imported' } }],
+					failed: []
+				})
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		render(Page);
+		await waitFor(() => {
+			expect(screen.getByText('Announcing PocketPress')).toBeInTheDocument();
+		});
+
+		const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+		expect(fileInput).toBeTruthy();
+
+		const file = new File(['# Imported\n\nHi.\n'], 'hello.md', { type: 'text/markdown' });
+		await fireEvent.change(fileInput, { target: { files: [file] } });
+
+		await waitFor(() => {
+			expect(screen.getByText('Imported 1 post from Markdown.')).toBeInTheDocument();
+		});
+		const calledImport = fetchMock.mock.calls.some(
+			([reqUrl, init]) =>
+				String(reqUrl).includes('/posts/import/markdown') &&
+				(init as RequestInit | undefined)?.method === 'POST'
+		);
+		expect(calledImport).toBe(true);
 	});
 
 	it('requests status=draft when the status filter changes', async () => {

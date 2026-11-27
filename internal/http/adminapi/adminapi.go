@@ -105,6 +105,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 	mux.Handle("GET /api/admin/v1/posts", user(h.listPosts))
 	mux.Handle("POST /api/admin/v1/posts", user(h.createPost))
+	// Markdown import is a static path and must be registered alongside the
+	// {id} routes; ServeMux prefers the literal segment over {id}.
+	mux.Handle("POST /api/admin/v1/posts/import/markdown", user(h.importMarkdown))
 	mux.Handle("GET /api/admin/v1/posts/{id}", user(h.getPost))
 	mux.Handle("PATCH /api/admin/v1/posts/{id}", user(h.updatePost))
 	mux.Handle("DELETE /api/admin/v1/posts/{id}", user(h.deletePost))

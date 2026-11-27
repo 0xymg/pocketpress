@@ -11,6 +11,7 @@
 		ApiError,
 		deletePost,
 		duplicatePost,
+		importMarkdownFiles,
 		listCategories,
 		listPosts,
 		type Category,
@@ -62,6 +63,11 @@
 	let bulkDeleting = $state(false);
 	let bulkError = $state('');
 	let selectAllEl = $state<HTMLInputElement | undefined>();
+
+	let importInputEl = $state<HTMLInputElement | undefined>();
+	let importing = $state(false);
+	let importMessage = $state('');
+	let importError = $state('');
 
 	const allSelected = $derived(posts.length > 0 && posts.every((p) => selectedIds.has(p.id)));
 	const someSelected = $derived(posts.some((p) => selectedIds.has(p.id)));
@@ -208,6 +214,49 @@
 		}
 	}
 
+	function openMarkdownImport() {
+		importMessage = '';
+		importError = '';
+		importInputEl?.click();
+	}
+
+	async function handleMarkdownImport(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const files = input.files ? Array.from(input.files) : [];
+		input.value = '';
+		if (files.length === 0) return;
+
+		importing = true;
+		importMessage = '';
+		importError = '';
+		try {
+			const result = await importMarkdownFiles(files);
+			const ok = result.imported?.length ?? 0;
+			const fail = result.failed?.length ?? 0;
+			if (ok > 0) {
+				await loadPosts();
+			}
+			if (fail === 0) {
+				importMessage = ok === 1 ? 'Imported 1 post from Markdown.' : `Imported ${ok} posts from Markdown.`;
+			} else if (ok === 0) {
+				const first = result.failed[0];
+				importError = first?.message
+					? `Import failed: ${first.message}`
+					: 'Import failed.';
+			} else {
+				importMessage = `Imported ${ok} post${ok === 1 ? '' : 's'}; ${fail} failed.`;
+				const first = result.failed[0];
+				if (first?.filename) {
+					importError = `${first.filename}: ${first.message}`;
+				}
+			}
+		} catch (err) {
+			importError = describeError(err);
+		} finally {
+			importing = false;
+		}
+	}
+
 	async function handleDuplicate(post: PostSummary) {
 		rowError = { ...rowError, [post.id]: '' };
 		rowBusy = { ...rowBusy, [post.id]: true };
@@ -277,8 +326,33 @@
 		<div class="flex flex-wrap items-center gap-3">
 			<h1 class="text-[32px] font-medium leading-9 text-stone-900">Posts</h1>
 			<Button href="/posts/new" size="sm">New post</Button>
+			<Button
+				type="button"
+				variant="outline"
+				size="sm"
+				disabled={importing}
+				onclick={openMarkdownImport}
+			>
+				{importing ? 'Importing…' : 'Import Markdown'}
+			</Button>
+			<input
+				bind:this={importInputEl}
+				type="file"
+				accept=".md,.markdown,text/markdown"
+				multiple
+				class="hidden"
+				aria-hidden="true"
+				tabindex="-1"
+				onchange={handleMarkdownImport}
+			/>
 		</div>
 		<p class="mt-2 text-[13px] text-stone-500">Everything you've written, drafts included.</p>
+		{#if importMessage}
+			<p class="mt-2 text-[13px] text-stone-600" role="status">{importMessage}</p>
+		{/if}
+		{#if importError}
+			<p class="mt-2 text-[13px] text-destructive" role="alert">{importError}</p>
+		{/if}
 	</div>
 	{#if selectedIds.size > 0}
 		<div class="flex items-center gap-2 text-[13px] text-stone-500">

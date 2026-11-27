@@ -17,6 +17,7 @@ PocketPress is a tiny, self-hosted blog backend for product developers. It gives
 - RSS 2.0 and Atom 1.0 feeds (`/api/v1/feed.rss`, `/api/v1/feed.atom`)
 - Sitemap XML (`/api/v1/sitemap.xml`)
 - Official JavaScript/TypeScript SDK (`@pocketpress/sdk` in `sdk/`)
+- Import posts from Markdown (YAML frontmatter + Lexical conversion)
 - Preview tokens for sharing drafts
 - Webhooks for rebuilding your frontend (post.published, post.updated, post.unpublished, post.deleted)
 - Backups (database + local files)
@@ -165,6 +166,19 @@ import { PocketPress } from "@pocketpress/sdk";
 const pp = new PocketPress({ baseUrl: "https://cms.example.com" });
 const { data: posts } = await pp.posts.list({ page: 1 });
 ```
+
+## Import from Markdown
+
+Authenticated editors can import `.md` / `.markdown` files from the admin Posts page, or via:
+
+```bash
+curl -X POST https://cms.example.com/api/admin/v1/posts/import/markdown \
+  -H 'Content-Type: application/json' \
+  -b 'pp_session=...' \
+  -d '{"documents":[{"filename":"hello.md","markdown":"---\ntitle: Hello\ntags: [Go]\n---\n\n## Section\n\nBody.\n"}]}'
+```
+
+Optional YAML frontmatter: `title`, `slug`, `excerpt`, `status` (`draft`|`published`), `featured`, `tags`, `categories`, `seo_title`, `seo_description`, `canonical_url`. Categories/tags are matched by slugified name and created when missing. Bodies convert to Lexical `content_json` + sanitized HTML. Multipart uploads use the `files` field (max 50 docs, 2 MiB each).
 
 ## Webhooks
 
