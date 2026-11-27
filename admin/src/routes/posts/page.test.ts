@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('$app/navigation', () => ({
+	goto: vi.fn()
+}));
+
 import { auth } from '$lib/auth.svelte';
 import Page from './+page.svelte';
 
@@ -70,6 +74,9 @@ function routedFetch(overrides: {
 		const url = typeof input === 'string' ? input : input.toString();
 		const method = (init?.method ?? 'GET').toUpperCase();
 
+		if (url.startsWith('/api/admin/v1/templates')) {
+			return jsonResponse(200, true, { templates: [] });
+		}
 		if (url.startsWith('/api/admin/v1/categories')) {
 			return (overrides.categories ?? (() => jsonResponse(200, true, { categories: [] })))();
 		}

@@ -31,6 +31,7 @@
 		createPost,
 		createPreviewToken,
 		deletePost,
+		createTemplate,
 		duplicatePost,
 		getPost,
 		getSettings,
@@ -255,6 +256,25 @@
 			statusError = describeSaveError(err);
 		} finally {
 			duplicating = false;
+		}
+	}
+
+	// Save as template — snapshots the last-saved post into a reusable template.
+	let savingAsTemplate = $state(false);
+	let templateSavedMessage = $state('');
+	async function handleSaveAsTemplate() {
+		if (!postId) return;
+		statusError = '';
+		templateSavedMessage = '';
+		savingAsTemplate = true;
+		try {
+			const name = `${formState.title.trim() || 'Untitled'} template`;
+			await createTemplate({ name, from_post: postId });
+			templateSavedMessage = `Saved as template “${name}”.`;
+		} catch (err) {
+			statusError = describeSaveError(err);
+		} finally {
+			savingAsTemplate = false;
 		}
 	}
 
@@ -757,6 +777,9 @@
 								<button type="button" class={popupItemClass} disabled={formState.dirty || statusBusy} onclick={() => { close(); handleArchive(); }}>Archive</button>
 							{/if}
 							<button type="button" class={popupItemClass} disabled={duplicating} onclick={() => { close(); handleDuplicate(); }}>Duplicate</button>
+							<button type="button" class={popupItemClass} disabled={savingAsTemplate || formState.dirty} onclick={() => { close(); handleSaveAsTemplate(); }}>
+								{savingAsTemplate ? 'Saving template…' : 'Save as template'}
+							</button>
 							<button type="button" class={popupItemClass} onclick={() => { close(); confirmingDelete = true; }}>Delete</button>
 						{/snippet}
 					</Popup>
@@ -802,6 +825,11 @@
 			{#if statusError}
 				<p class="px-6 lg:px-[60px] pb-2 text-xs text-destructive" role="alert">
 					{statusError}
+				</p>
+			{/if}
+			{#if templateSavedMessage}
+				<p class="px-6 lg:px-[60px] pb-2 text-xs text-stone-600" role="status">
+					{templateSavedMessage}
 				</p>
 			{/if}
 			{#if deleteError}
