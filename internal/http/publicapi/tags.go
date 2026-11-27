@@ -19,7 +19,7 @@ func (h *Handler) listTags(w http.ResponseWriter, r *http.Request) {
 	for _, t := range tags {
 		dtos = append(dtos, toTagDTO(t))
 	}
-	h.writeData(w, http.StatusOK, listCacheControl, dtos)
+	h.writeData(w, r, http.StatusOK, listCacheControl, dtos)
 }
 
 // getTag handles GET /api/v1/tags/{slug}.
@@ -33,7 +33,7 @@ func (h *Handler) getTag(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
-	h.writeData(w, http.StatusOK, listCacheControl, toTagDTO(tg))
+	h.writeData(w, r, http.StatusOK, listCacheControl, toTagDTO(tg))
 }
 
 // tagPosts handles GET /api/v1/tags/{slug}/posts: the same
@@ -58,7 +58,7 @@ func (h *Handler) tagPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !catOK {
-		h.writePostList(w, nil, parsePage(q), parsePerPage(q), 0)
+		h.writePostList(w, r, nil, parsePage(q), parsePerPage(q), 0)
 		return
 	}
 
@@ -78,5 +78,5 @@ func (h *Handler) tagPosts(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
-	h.writePostList(w, result.Posts, result.Page, result.PerPage, result.TotalItems)
+	h.writePostList(w, r, result.Posts, result.Page, result.PerPage, result.TotalItems)
 }

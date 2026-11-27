@@ -69,6 +69,10 @@ describe('Sidebar', () => {
 			'href',
 			'/settings/webhooks'
 		);
+		expect(screen.getByRole('link', { name: 'API keys' })).toHaveAttribute(
+			'href',
+			'/settings/api-keys'
+		);
 	});
 
 	it('hides the System group from editors', () => {

@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pocketpress/pocketpress/internal/apikey"
 	"github.com/pocketpress/pocketpress/internal/auth"
 	"github.com/pocketpress/pocketpress/internal/content"
 	"github.com/pocketpress/pocketpress/internal/http/middleware"
@@ -49,6 +50,7 @@ type Handler struct {
 	content       *content.Service
 	media         *media.Service
 	webhook       *webhook.Service
+	keys          *apikey.Service
 	db            *sql.DB
 	preview       *preview.Tokenizer
 	logger        *slog.Logger
@@ -58,12 +60,12 @@ type Handler struct {
 // New builds an admin API Handler. db backs the settings and preview-token
 // endpoints (which read the singleton settings row directly); previewTokens
 // mints the short-lived tokens the preview-token endpoint returns; webhookSvc
-// backs the owner-only webhook management endpoints.
-func New(svc *auth.Service, contentSvc *content.Service, mediaSvc *media.Service, webhookSvc *webhook.Service, db *sql.DB, previewTokens *preview.Tokenizer, logger *slog.Logger, secureCookies bool) *Handler {
+// and keySvc back the owner-only webhook and API-key management endpoints.
+func New(svc *auth.Service, contentSvc *content.Service, mediaSvc *media.Service, webhookSvc *webhook.Service, keySvc *apikey.Service, db *sql.DB, previewTokens *preview.Tokenizer, logger *slog.Logger, secureCookies bool) *Handler {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	return &Handler{svc: svc, content: contentSvc, media: mediaSvc, webhook: webhookSvc, db: db, preview: previewTokens, logger: logger, secureCookies: secureCookies}
+	return &Handler{svc: svc, content: contentSvc, media: mediaSvc, webhook: webhookSvc, keys: keySvc, db: db, preview: previewTokens, logger: logger, secureCookies: secureCookies}
 }
 
 // Register wires every admin API route onto mux. Public routes
@@ -137,6 +139,13 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /api/admin/v1/webhooks/{id}/test", owner(h.testWebhook))
 	mux.Handle("GET /api/admin/v1/webhooks/{id}/deliveries", owner(h.listWebhookDeliveries))
 	mux.Handle("POST /api/admin/v1/deliveries/{id}/retry", owner(h.retryDelivery))
+
+	// API keys: owner-only. Raw key is returned exactly once on create;
+	// revoke soft-disables, delete hard-removes.
+	mux.Handle("GET /api/admin/v1/api-keys", owner(h.listAPIKeys))
+	mux.Handle("POST /api/admin/v1/api-keys", owner(h.createAPIKey))
+	mux.Handle("POST /api/admin/v1/api-keys/{id}/revoke", owner(h.revokeAPIKey))
+	mux.Handle("DELETE /api/admin/v1/api-keys/{id}", owner(h.deleteAPIKey))
 
 	// Media (Phase 4): upload/list/patch/delete require an authenticated
 	// user, same as the rest of the content endpoints.

@@ -56,7 +56,7 @@ func (h *Handler) writeFeed(w http.ResponseWriter, r *http.Request, atom bool) {
 	feedURL := absoluteRequestURL(r)
 	updated := feedUpdatedAt(result.Posts)
 
-	w.Header().Set("Cache-Control", listCacheControl)
+	w.Header().Set("Cache-Control", resolveCacheControl(r.Context(), listCacheControl))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if atom {
 		w.Header().Set("Content-Type", atomContentType)

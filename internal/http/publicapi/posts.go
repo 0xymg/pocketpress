@@ -49,7 +49,7 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 	// post; short-circuit to an empty page rather than falling through to
 	// an unfiltered (or wrongly-filtered) query.
 	if !catOK || !tagOK {
-		h.writePostList(w, nil, parsePage(q), parsePerPage(q), 0)
+		h.writePostList(w, r, nil, parsePage(q), parsePerPage(q), 0)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
-	h.writePostList(w, result.Posts, result.Page, result.PerPage, result.TotalItems)
+	h.writePostList(w, r, result.Posts, result.Page, result.PerPage, result.TotalItems)
 }
 
 // getPost handles GET /api/v1/posts/{slug}: a single publicly-visible post,
@@ -87,7 +87,7 @@ func (h *Handler) getPost(w http.ResponseWriter, r *http.Request) {
 
 	etag := postETag(p.Row)
 	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", postDetailCacheControl)
+	w.Header().Set("Cache-Control", resolveCacheControl(r.Context(), postDetailCacheControl))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	if inm := r.Header.Get("If-None-Match"); inm != "" && inm == etag {
@@ -99,7 +99,7 @@ func (h *Handler) getPost(w http.ResponseWriter, r *http.Request) {
 }
 
 // writePostList maps posts to the public list envelope and writes it.
-func (h *Handler) writePostList(w http.ResponseWriter, posts []content.Post, page, perPage, totalItems int) {
+func (h *Handler) writePostList(w http.ResponseWriter, r *http.Request, posts []content.Post, page, perPage, totalItems int) {
 	dtos := make([]postDTO, 0, len(posts))
 	for _, p := range posts {
 		dtos = append(dtos, toPostDTO(p))
@@ -109,7 +109,7 @@ func (h *Handler) writePostList(w http.ResponseWriter, posts []content.Post, pag
 		totalPages = (totalItems + perPage - 1) / perPage
 	}
 	meta := metaDTO{Page: page, PerPage: perPage, TotalItems: totalItems, TotalPages: totalPages}
-	h.writeListData(w, http.StatusOK, listCacheControl, dtos, meta)
+	h.writeListData(w, r, http.StatusOK, listCacheControl, dtos, meta)
 }
 
 // postETag builds the post detail endpoint's ETag: a quoted hex SHA-256 of

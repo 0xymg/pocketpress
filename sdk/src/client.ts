@@ -29,6 +29,14 @@ export interface PocketPressOptions {
   fetch?: FetchLike;
   /** Extra headers sent on every request. */
   headers?: HeadersInit;
+  /**
+   * Optional PocketPress API key (`ppkey_…`). Sent as
+   * `Authorization: Bearer <apiKey>` on every request. Required when the
+   * instance has `public_api_enabled` set to false (`content:read` scope);
+   * also enables draft preview without a short-lived preview token when
+   * the key has `preview:read`.
+   */
+  apiKey?: string;
 }
 
 function trimTrailingSlash(url: string): string {
@@ -70,7 +78,11 @@ export class PocketPress {
     }
     this.baseUrl = trimTrailingSlash(options.baseUrl);
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
-    this.defaultHeaders = options.headers ?? {};
+    const headers = new Headers(options.headers ?? {});
+    if (options.apiKey) {
+      headers.set("Authorization", `Bearer ${options.apiKey}`);
+    }
+    this.defaultHeaders = headers;
 
     this.posts = new PostsResource(this);
     this.categories = new CategoriesResource(this);

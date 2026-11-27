@@ -752,3 +752,46 @@ export function listDeliveries(
 export function retryDelivery(deliveryId: string): Promise<void> {
 	return adminFetch<void>(`/deliveries/${deliveryId}/retry`, { method: 'POST' });
 }
+
+// ---------------------------------------------------------------------------
+// API keys (v0.2, OWNER only — private content API access).
+// The raw key is returned exactly once on create; list/revoke never include it.
+// ---------------------------------------------------------------------------
+
+export type APIKeyScope = 'content:read' | 'preview:read';
+
+export interface APIKey {
+	id: string;
+	name: string;
+	prefix: string;
+	scopes: APIKeyScope[];
+	expires_at: string | null;
+	last_used_at: string | null;
+	revoked_at: string | null;
+	created_at: string;
+}
+
+export interface CreateAPIKeyPayload {
+	name: string;
+	scopes: APIKeyScope[];
+	expires_at?: string | null;
+}
+
+export function listAPIKeys(): Promise<{ api_keys: APIKey[] }> {
+	return adminFetch<{ api_keys: APIKey[] }>('/api-keys');
+}
+
+export function createAPIKey(payload: CreateAPIKeyPayload): Promise<{ api_key: APIKey; key: string }> {
+	return adminFetch<{ api_key: APIKey; key: string }>('/api-keys', {
+		method: 'POST',
+		body: JSON.stringify(payload)
+	});
+}
+
+export function revokeAPIKey(id: string): Promise<{ api_key: APIKey }> {
+	return adminFetch<{ api_key: APIKey }>(`/api-keys/${id}/revoke`, { method: 'POST' });
+}
+
+export function deleteAPIKey(id: string): Promise<void> {
+	return adminFetch<void>(`/api-keys/${id}`, { method: 'DELETE' });
+}

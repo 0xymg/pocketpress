@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/pocketpress/pocketpress/internal/apikey"
 	"github.com/pocketpress/pocketpress/internal/content"
 	"github.com/pocketpress/pocketpress/internal/http/middleware"
 	"github.com/pocketpress/pocketpress/internal/preview"
@@ -41,18 +42,20 @@ const listCacheControl = "public, max-age=60"
 // content service).
 type Handler struct {
 	content *content.Service
+	keys    *apikey.Service
 	db      *sql.DB
 	preview *preview.Tokenizer
 	logger  *slog.Logger
 }
 
 // New builds a public API Handler. previewTokens verifies the tokens the
-// preview endpoint requires.
-func New(contentSvc *content.Service, db *sql.DB, previewTokens *preview.Tokenizer, logger *slog.Logger) *Handler {
+// preview endpoint requires. keys authorizes Bearer API keys for private
+// content access when public_api_enabled is false (and for preview:read).
+func New(contentSvc *content.Service, keySvc *apikey.Service, db *sql.DB, previewTokens *preview.Tokenizer, logger *slog.Logger) *Handler {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	return &Handler{content: contentSvc, db: db, preview: previewTokens, logger: logger}
+	return &Handler{content: contentSvc, keys: keySvc, db: db, preview: previewTokens, logger: logger}
 }
 
 // Register wires every public API route onto mux, each behind the
@@ -77,16 +80,19 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/sitemap.xml", h.gate(h.sitemap))
 
 	// The preview endpoint is deliberately NOT behind the public_api_enabled
-	// gate: it is an authorized flow (a valid, post-scoped preview token is
-	// required), so it must keep working for a product frontend previewing
-	// drafts even when the public content API is switched off.
+	// gate: it is an authorized flow (a valid, post-scoped preview token, or
+	// a Bearer API key with preview:read), so it must keep working for a
+	// product frontend previewing drafts even when the public content API
+	// is switched off.
 	mux.HandleFunc("GET /api/v1/preview/posts/{slug}", h.previewPost)
 }
 
-// gate wraps next so every /api/v1/* request first checks
-// settings.public_api_enabled, returning the frozen 404 "api_disabled"
-// envelope when it is false (or when no settings row exists yet, i.e.
-// before first-run setup — there is no content to serve either way).
+// gate wraps next so every /api/v1/* content route first checks
+// settings.public_api_enabled. When the public API is disabled, a Bearer
+// API key with content:read may still access the route (private content
+// API). Without a usable key the frozen 404 "api_disabled" envelope is
+// returned (including before first-run setup — there is no content to
+// serve either way).
 func (h *Handler) gate(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		enabled, err := h.publicAPIEnabled(r.Context())
@@ -94,12 +100,43 @@ func (h *Handler) gate(next http.HandlerFunc) http.Handler {
 			h.serverError(w, err)
 			return
 		}
-		if !enabled {
+		if enabled {
+			// Optional API key: if a ppkey_ Bearer is presented, validate it
+			// (bad keys fail closed); otherwise serve publicly as before.
+			if k, presented, err := h.authenticateAPIKey(r.Context(), r, apikey.ScopeContentRead); presented {
+				if err != nil {
+					h.writeAPIKeyAuthError(w, err)
+					return
+				}
+				r = r.WithContext(withAPIKey(r.Context(), k))
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		k, presented, err := h.authenticateAPIKey(r.Context(), r, apikey.ScopeContentRead)
+		if err != nil {
+			h.writeAPIKeyAuthError(w, err)
+			return
+		}
+		if !presented {
 			h.writeError(w, http.StatusNotFound, "api_disabled", "The public API is disabled.")
 			return
 		}
-		next(w, r)
+		ctx := withPrivateAuth(withAPIKey(r.Context(), k))
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (h *Handler) writeAPIKeyAuthError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, apikey.ErrMissingScope):
+		h.writeError(w, http.StatusForbidden, "forbidden", "The API key does not have the required scope.")
+	case errors.Is(err, apikey.ErrInvalidKey):
+		h.writeError(w, http.StatusUnauthorized, "unauthorized", "The API key is missing, invalid, expired or revoked.")
+	default:
+		h.serverError(w, err)
+	}
 }
 
 func (h *Handler) publicAPIEnabled(ctx context.Context) (bool, error) {
@@ -135,16 +172,17 @@ func SettingsCORSOrigins(db *sql.DB) middleware.AllowedOriginsFunc {
 
 // writeData writes {"data": v} with the given status, Cache-Control and the
 // X-Content-Type-Options: nosniff header every public API response carries.
-func (h *Handler) writeData(w http.ResponseWriter, status int, cacheControl string, v any) {
-	w.Header().Set("Cache-Control", cacheControl)
+// Private API-key access forces Cache-Control: private, no-store.
+func (h *Handler) writeData(w http.ResponseWriter, r *http.Request, status int, cacheControl string, v any) {
+	w.Header().Set("Cache-Control", resolveCacheControl(r.Context(), cacheControl))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	middleware.WriteJSON(w, status, map[string]any{"data": v})
 }
 
 // writeListData writes {"data": v, "meta": meta} with the given status and
 // Cache-Control.
-func (h *Handler) writeListData(w http.ResponseWriter, status int, cacheControl string, v any, meta metaDTO) {
-	w.Header().Set("Cache-Control", cacheControl)
+func (h *Handler) writeListData(w http.ResponseWriter, r *http.Request, status int, cacheControl string, v any, meta metaDTO) {
+	w.Header().Set("Cache-Control", resolveCacheControl(r.Context(), cacheControl))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	middleware.WriteJSON(w, status, map[string]any{"data": v, "meta": meta})
 }

@@ -173,6 +173,12 @@ const pp = new PocketPress({ baseUrl: "https://cms.example.com" });
 const { data: posts } = await pp.posts.list({ page: 1 });
 ```
 
+Pass `apiKey: "ppkey_…"` when the instance has Public API disabled (see **Settings → API keys**).
+
+## API keys (private content API)
+
+Owner-only **Settings → API keys** issues Bearer keys (`ppkey_…`) for private access when Public API is off. Scopes: `content:read`, `preview:read`. Raw keys are shown once and stored as SHA-256 hashes. See `docs/integration.md`.
+
 ## Import from Markdown
 
 Authenticated editors can import `.md` / `.markdown` files from the admin Posts page, or via:

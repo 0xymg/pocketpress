@@ -53,6 +53,9 @@ func CORS(allowedOrigins AllowedOriginsFunc) func(http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Vary", "Origin")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+				// Authorization lets browser clients send Bearer API keys for
+				// private content API access (public_api_enabled=false).
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization")
 			}
 
 			if r.Method == http.MethodOptions {

@@ -29,6 +29,7 @@ import { PocketPress, PocketPressError } from "@pocketpress/sdk";
 
 const pp = new PocketPress({
   baseUrl: process.env.POCKETPRESS_URL ?? "http://localhost:8090",
+  // apiKey: process.env.POCKETPRESS_API_KEY, // when public_api_enabled is false
 });
 
 const { data: posts, meta } = await pp.posts.list({ page: 1, per_page: 20 });

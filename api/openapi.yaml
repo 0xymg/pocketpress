@@ -3,9 +3,10 @@ info:
   title: PocketPress Public API
   version: "1"
   summary: >-
-    PocketPress's public, unauthenticated, versioned content API. Read-only:
-    posts, categories and tags. Only ever returns published content — see
-    the visibility rule documented on GET /api/v1/posts/{slug}.
+    PocketPress's versioned content API. Read-only: posts, categories and
+    tags. Only ever returns published content — see the visibility rule
+    documented on GET /api/v1/posts/{slug}. Optionally authenticated with
+    Bearer API keys for private access.
   description: >-
     Most `/api/v1/*` responses are `Content-Type: application/json` with an
     `X-Content-Type-Options: nosniff` header. Syndication feeds return XML
@@ -17,9 +18,26 @@ info:
     ## Availability
 
 
-    Every `/api/v1/*` route is disabled (returns `404 api_disabled`) when
-    the instance's `public_api_enabled` setting is false, or before the
-    instance has completed first-run setup.
+    When `public_api_enabled` is true (default after setup), content routes
+    are publicly readable without credentials. When it is false (or before
+    first-run setup), unauthenticated requests return `404 api_disabled`.
+    A Bearer API key with scope `content:read` may still access those
+    routes; responses then use `Cache-Control: private, no-store`.
+
+
+    ## Authentication
+
+
+    Owner-issued API keys (`ppkey_…`) are sent as
+    `Authorization: Bearer <key>`. Scopes:
+
+    - `content:read` — posts, categories, tags, feeds, sitemap
+    - `preview:read` — `GET /api/v1/preview/posts/{slug}` without a
+      preview token
+
+    Raw keys are shown once at creation and stored only as SHA-256 hashes.
+    Invalid/revoked/expired keys yield `401 unauthorized`; a valid key
+    missing the required scope yields `403 forbidden`.
 
 
     ## Caching
@@ -43,10 +61,11 @@ info:
     `PP_CORS_ORIGINS` configuration and the instance's `cors_origins`
     setting. A request whose `Origin` header exactly matches an allowed
     origin gets `Access-Control-Allow-Origin: <origin>`,
-    `Vary: Origin` and `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`.
-    A non-matching (or missing) `Origin` gets no CORS headers at all — the
-    request is still served, just not readable cross-origin by a browser.
-    `Access-Control-Allow-Credentials` is never sent: this API is
+    `Vary: Origin`, `Access-Control-Allow-Methods: GET, HEAD, OPTIONS`,
+    and `Access-Control-Allow-Headers: Authorization` (for Bearer API
+    keys). A non-matching (or missing) `Origin` gets no CORS headers at
+    all — the request is still served, just not readable cross-origin by a
+    browser. `Access-Control-Allow-Credentials` is never sent: this API is
     cookie-free. An `OPTIONS` preflight request to any in-scope path
     returns a bare `204 No Content`.
 
@@ -94,6 +113,11 @@ paths:
       description: >-
         Returns one page of publicly-visible posts (see the visibility rule
         on GET /api/v1/posts/{slug}), newest published first by default.
+        When `public_api_enabled` is false, requires a Bearer API key with
+        `content:read`.
+      security:
+        - {}
+        - ApiKeyBearer: []
       tags: [Posts]
       parameters:
         - $ref: "#/components/parameters/Page"
@@ -176,32 +200,39 @@ paths:
   /api/v1/preview/posts/{slug}:
     get:
       operationId: previewPostBySlug
-      summary: Preview a post by slug with a signed token
+      summary: Preview a post by slug (token or API key)
       description: >-
         Returns a single post by slug **regardless of its status** (draft,
-        scheduled, archived or published) to a caller holding a valid,
-        post-scoped preview token — the authorized draft-preview flow. Mint a
-        token from the admin API's `POST /api/admin/v1/posts/{id}/preview-token`
-        (tokens are HMAC-signed, bound to one post, and expire after 15
-        minutes).
+        scheduled, archived or published). Authorize with either:
+
+
+        - `?token=` — a short-lived, post-scoped preview token from
+          `POST /api/admin/v1/posts/{id}/preview-token` (HMAC-signed, bound
+          to one post, expires after 15 minutes), or
+        - `Authorization: Bearer ppkey_…` with scope `preview:read`
 
 
         Unlike every other `/api/v1/*` route, this endpoint is **not** gated
-        by `public_api_enabled`: it is an authorized flow and keeps serving
-        previews even when the public content API is switched off.
+        by `public_api_enabled`.
 
 
         The response body is the same `Post` shape as GET
         /api/v1/posts/{slug}, except `published_at` is `null` for a post that
         has never been published. Responses are never cached
         (`Cache-Control: no-store`).
+      security:
+        - {}
+        - ApiKeyBearer: []
       tags: [Posts]
       parameters:
         - $ref: "#/components/parameters/Slug"
         - name: token
           in: query
-          required: true
-          description: A signed, short-lived preview token bound to this post, from the admin preview-token endpoint.
+          required: false
+          description: >-
+            A signed, short-lived preview token bound to this post, from the
+            admin preview-token endpoint. Optional when a Bearer API key with
+            `preview:read` is provided instead.
           schema:
             type: string
       responses:
@@ -650,6 +681,16 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
 
 components:
+  securitySchemes:
+    ApiKeyBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: ppkey
+      description: >-
+        Owner-issued PocketPress API key (`ppkey_…`). Required for content
+        routes when `public_api_enabled` is false (`content:read`). Optional
+        when the public API is enabled. `preview:read` authorizes the
+        preview endpoint without a short-lived preview token.
   parameters:
     Slug:
       name: slug

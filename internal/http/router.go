@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pocketpress/pocketpress/internal/apikey"
 	"github.com/pocketpress/pocketpress/internal/auth"
 	"github.com/pocketpress/pocketpress/internal/content"
 	"github.com/pocketpress/pocketpress/internal/http/adminapi"
@@ -150,12 +151,13 @@ func Build(cfg Config) *Server {
 	contentService.SetEvents(dispatcher)
 	webhookService := webhook.NewService(cfg.DB, cipher, dispatcher, cfg.Production, cfg.Logger)
 	worker := webhook.NewWorker(cfg.DB, cipher, webhook.NewDeliveryClient(cfg.Production), cfg.Logger)
+	keyService := apikey.NewService(cfg.DB, cfg.Logger)
 
-	adminapi.New(authService, contentService, mediaService, webhookService, cfg.DB, previewTokens, cfg.Logger, cfg.SecureCookies).Register(mux)
+	adminapi.New(authService, contentService, mediaService, webhookService, keyService, cfg.DB, previewTokens, cfg.Logger, cfg.SecureCookies).Register(mux)
 
 	// The public API is registered before the /api/ 404 catch-all below so
 	// its explicit /api/v1/* routes take precedence over it.
-	publicapi.New(contentService, cfg.DB, previewTokens, cfg.Logger).Register(mux)
+	publicapi.New(contentService, keyService, cfg.DB, previewTokens, cfg.Logger).Register(mux)
 
 	// Any /api path not matched by a more specific pattern above returns
 	// the standard 404 envelope instead of falling through to the SPA.
