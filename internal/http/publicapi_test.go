@@ -730,6 +730,7 @@ func TestPublicAPIDisabled(t *testing.T) {
 		"/api/v1/tags/whatever/posts",
 		"/api/v1/feed.rss",
 		"/api/v1/feed.atom",
+		"/api/v1/sitemap.xml",
 	}
 	for _, path := range paths {
 		resp := env.do(t, http.MethodGet, path, nil)

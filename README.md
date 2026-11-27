@@ -15,6 +15,7 @@ PocketPress is a tiny, self-hosted blog backend for product developers. It gives
 - SEO metadata (title, description, canonical URL, Open Graph image)
 - Public REST API at `/api/v1` with pagination, filtering, caching, and ETags
 - RSS 2.0 and Atom 1.0 feeds (`/api/v1/feed.rss`, `/api/v1/feed.atom`)
+- Sitemap XML (`/api/v1/sitemap.xml`)
 - Preview tokens for sharing drafts
 - Webhooks for rebuilding your frontend (post.published, post.updated, post.unpublished, post.deleted)
 - Backups (database + local files)
@@ -97,6 +98,7 @@ The public content API is at `/api/v1`. See `api/openapi.yaml` for the complete 
 curl https://cms.example.com/api/v1/posts
 curl https://cms.example.com/api/v1/feed.rss
 curl https://cms.example.com/api/v1/feed.atom
+curl https://cms.example.com/api/v1/sitemap.xml
 ```
 
 **Response structure:**

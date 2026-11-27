@@ -488,6 +488,35 @@ paths:
         "404":
           $ref: "#/components/responses/ApiDisabled"
 
+  /api/v1/sitemap.xml:
+    get:
+      operationId: getSitemap
+      summary: Sitemap of published posts
+      description: >-
+        Returns a Sitemap 0.9 XML document listing the site homepage
+        (`settings.site_url`, when set) and every publicly-visible post
+        (same visibility rule as GET /api/v1/posts/{slug}). Each post
+        `<loc>` prefers the SEO `canonical_url` when set; otherwise
+        `{site_url}/{slug}`. Post entries include `<lastmod>` from the
+        later of `updated_at` / `published_at`. Capped at 50,000 URLs
+        (Sitemap protocol limit). Gated by `public_api_enabled`.
+      tags: [Feeds]
+      responses:
+        "200":
+          description: Sitemap 0.9 document.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=60"
+          content:
+            application/xml:
+              schema:
+                type: string
+                description: Sitemap 0.9 XML document.
+        "404":
+          $ref: "#/components/responses/ApiDisabled"
+
 components:
   parameters:
     Slug:
@@ -766,3 +795,4 @@ tags:
   - name: Categories
   - name: Tags
   - name: Feeds
+    description: RSS/Atom syndication feeds and Sitemap XML.
