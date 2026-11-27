@@ -62,6 +62,8 @@ Features that serve newsletters, commerce, community, memberships, or help build
 
 ## Current phase
 
+**v0.3 in progress** — first §16 item: **Multiple authors with richer profiles** (migration `0005_author_profiles`; public `/api/v1/authors`; profile fields slug/bio/website/location/avatar; admin `/settings/profile`).
+
 **v0.2 complete** — all plan §16 items: RSS/Atom feeds, Sitemap, JS/TS SDK, Markdown/Ghost/WordPress import, FTS, image transforms, webhook filters, and API key management for private content APIs (`ppkey_…` Bearer keys; SHA-256 hashed at rest; scopes `content:read` / `preview:read`; admin `/settings/api-keys`; uses existing `api_keys` table from `0001_init`).
 
-v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02). Anything beyond plan §16 belongs to v0.3+ (see plan section 16).
+v0.1 MVP remains complete (all eight development-plan phases verified as of 2026-08-02). Remaining v0.3 items (localization, scheduling calendar, draft review, duplication templates, per-post metadata) are not started.

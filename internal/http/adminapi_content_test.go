@@ -679,7 +679,7 @@ func TestPostGetAndDelete(t *testing.T) {
 // Authors, permissions
 // ---------------------------------------------------------------------------
 
-// TestAuthorsEndpointHidesEmail confirms /authors returns only id/name for
+// TestAuthorsEndpointHidesEmail confirms /authors returns id/name/slug for
 // active users and never leaks email or role.
 func TestAuthorsEndpointHidesEmail(t *testing.T) {
 	env := newTestEnv(t, false)
@@ -703,8 +703,8 @@ func TestAuthorsEndpointHidesEmail(t *testing.T) {
 	}
 	for _, a := range authors {
 		am := a.(map[string]any)
-		if am["id"] == nil || am["name"] == nil {
-			t.Fatalf("author missing id/name: %v", am)
+		if am["id"] == nil || am["name"] == nil || am["slug"] == nil || am["slug"] == "" {
+			t.Fatalf("author missing id/name/slug: %v", am)
 		}
 		if _, ok := am["email"]; ok {
 			t.Fatalf("author leaked email: %v", am)

@@ -1,5 +1,6 @@
 import { PocketPressError } from "./errors.js";
 import type {
+  Author,
   Category,
   DataResponse,
   GetPostResult,
@@ -70,6 +71,7 @@ export class PocketPress {
   readonly posts: PostsResource;
   readonly categories: CategoriesResource;
   readonly tags: TagsResource;
+  readonly authors: AuthorsResource;
   readonly feeds: FeedsResource;
 
   constructor(options: PocketPressOptions) {
@@ -87,6 +89,7 @@ export class PocketPress {
     this.posts = new PostsResource(this);
     this.categories = new CategoriesResource(this);
     this.tags = new TagsResource(this);
+    this.authors = new AuthorsResource(this);
     this.feeds = new FeedsResource(this);
   }
 
@@ -365,6 +368,45 @@ class TagsResource {
     });
     return this.client.requestJson<PostListResponse>(
       `/api/v1/tags/${encodePathSegment(slug)}/posts${qs}`,
+    );
+  }
+}
+
+class AuthorsResource {
+  constructor(private readonly client: PocketPress) {}
+
+  /** `GET /api/v1/authors` */
+  async list(): Promise<Author[]> {
+    const json = await this.client.requestJson<DataResponse<Author[]>>(
+      "/api/v1/authors",
+    );
+    return json.data;
+  }
+
+  /** `GET /api/v1/authors/{slug}` */
+  async get(slug: string): Promise<Author> {
+    const json = await this.client.requestJson<DataResponse<Author>>(
+      `/api/v1/authors/${encodePathSegment(slug)}`,
+    );
+    return json.data;
+  }
+
+  /** `GET /api/v1/authors/{slug}/posts` */
+  listPosts(
+    slug: string,
+    params: Omit<PostListParams, "author"> = {},
+  ): Promise<PostListResponse> {
+    const qs = buildQuery({
+      page: params.page,
+      per_page: params.per_page,
+      category: params.category,
+      tag: params.tag,
+      featured: params.featured,
+      sort: params.sort,
+      q: params.q,
+    });
+    return this.client.requestJson<PostListResponse>(
+      `/api/v1/authors/${encodePathSegment(slug)}/posts${qs}`,
     );
   }
 }

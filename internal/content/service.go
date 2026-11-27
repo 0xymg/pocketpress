@@ -255,8 +255,9 @@ func (s *Service) DeleteTag(ctx context.Context, id string) error {
 // Authors
 // ---------------------------------------------------------------------------
 
-// ListAuthors returns the id and name of every active user, for the admin
-// author selector. Email and role are deliberately not exposed here.
+// ListAuthors returns every active user's public author projection, for the
+// admin author selector and the public authors list. Email and role are
+// deliberately not exposed here.
 func (s *Service) ListAuthors(ctx context.Context) ([]Author, error) {
 	users, err := store.ListUsers(ctx, s.db)
 	if err != nil {
@@ -267,9 +268,63 @@ func (s *Service) ListAuthors(ctx context.Context) ([]Author, error) {
 		if !u.Active {
 			continue
 		}
-		authors = append(authors, Author{ID: u.ID, Name: u.Name})
+		authors = append(authors, s.toAuthor(ctx, u))
 	}
 	return authors, nil
+}
+
+// GetAuthorBySlug returns the public author projection for an active user
+// with the given slug. Inactive or unknown slugs return store.ErrNotFound.
+func (s *Service) GetAuthorBySlug(ctx context.Context, slug string) (Author, error) {
+	u, err := store.GetUserBySlug(ctx, s.db, slug)
+	if err != nil {
+		return Author{}, err
+	}
+	if !u.Active {
+		return Author{}, store.ErrNotFound
+	}
+	return s.toAuthor(ctx, u), nil
+}
+
+// ResolveAuthorFilter turns an optional author query value (user id or
+// public slug) into a user id. Empty input means no filter; an unknown
+// value means no post can match (ok=false).
+func (s *Service) ResolveAuthorFilter(ctx context.Context, author string) (id string, ok bool, err error) {
+	if author == "" {
+		return "", true, nil
+	}
+	if u, err := store.GetUserByID(ctx, s.db, author); err == nil {
+		return u.ID, true, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return "", false, err
+	}
+	u, err := store.GetUserBySlug(ctx, s.db, author)
+	if errors.Is(err, store.ErrNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return u.ID, true, nil
+}
+
+// toAuthor maps a store.User to the public Author projection, resolving
+// avatar media to a relative file URL when possible.
+func (s *Service) toAuthor(ctx context.Context, u store.User) Author {
+	a := Author{
+		ID:       u.ID,
+		Name:     u.Name,
+		Slug:     u.Slug,
+		Bio:      u.Bio,
+		Website:  u.Website,
+		Location: u.Location,
+	}
+	if u.Avatar != "" {
+		if m, err := store.GetMediaByID(ctx, s.db, u.Avatar); err == nil {
+			a.AvatarURL = "/api/files/" + m.ID + "/" + url.PathEscape(m.OriginalName)
+		}
+	}
+	return a
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +370,7 @@ func (s *Service) ListPosts(ctx context.Context, q PostListQuery) (PostListResul
 		return PostListResult{}, err
 	}
 
-	authorCache := map[string]store.User{}
+	authorCache := map[string]Author{}
 	posts := make([]Post, 0, len(rows))
 	for _, row := range rows {
 		p, err := s.hydrate(ctx, row, authorCache)
@@ -906,7 +961,7 @@ func (s *Service) loadPost(ctx context.Context, id string) (Post, error) {
 // hydrate loads a post's categories, tags, author and cover/OG media.
 // authorCache, when non-nil, memoizes author lookups across a page of
 // posts.
-func (s *Service) hydrate(ctx context.Context, row store.Post, authorCache map[string]store.User) (Post, error) {
+func (s *Service) hydrate(ctx context.Context, row store.Post, authorCache map[string]Author) (Post, error) {
 	cats, err := store.GetPostCategories(ctx, s.db, row.ID)
 	if err != nil {
 		return Post{}, err
@@ -918,10 +973,11 @@ func (s *Service) hydrate(ctx context.Context, row store.Post, authorCache map[s
 
 	author, ok := lookupCached(authorCache, row.Author)
 	if !ok {
-		author, err = store.GetUserByID(ctx, s.db, row.Author)
+		u, err := store.GetUserByID(ctx, s.db, row.Author)
 		if err != nil {
 			return Post{}, err
 		}
+		author = s.toAuthor(ctx, u)
 		if authorCache != nil {
 			authorCache[row.Author] = author
 		}
@@ -1068,9 +1124,9 @@ func tagIDs(tags []store.Tag) []string {
 	return ids
 }
 
-func lookupCached(cache map[string]store.User, id string) (store.User, bool) {
+func lookupCached(cache map[string]Author, id string) (Author, bool) {
 	if cache == nil {
-		return store.User{}, false
+		return Author{}, false
 	}
 	u, ok := cache[id]
 	return u, ok

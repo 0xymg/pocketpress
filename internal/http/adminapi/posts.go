@@ -92,7 +92,7 @@ func toPostSummaryDTO(p content.Post) postSummaryDTO {
 		Status:       p.Row.Status,
 		Excerpt:      p.Row.Excerpt,
 		Featured:     p.Row.Featured,
-		Author:       authorDTO{ID: p.Author.ID, Name: p.Author.Name},
+		Author:       authorDTO{ID: p.Author.ID, Name: p.Author.Name, Slug: p.Author.Slug},
 		Categories:   categoryRefs(p.Categories),
 		Tags:         tagRefs(p.Tags),
 		CoverImage:   toMediaRefDTO(p.CoverImage),

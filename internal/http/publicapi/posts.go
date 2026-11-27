@@ -44,11 +44,16 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
+	authorID, authorOK, err := h.resolveAuthorFilter(r.Context(), q.Get("author"))
+	if err != nil {
+		h.serverError(w, err)
+		return
+	}
 
-	// A category/tag filter naming an unknown slug can never match any
-	// post; short-circuit to an empty page rather than falling through to
-	// an unfiltered (or wrongly-filtered) query.
-	if !catOK || !tagOK {
+	// A category/tag/author filter naming an unknown value can never match
+	// any post; short-circuit to an empty page rather than falling through
+	// to an unfiltered (or wrongly-filtered) query.
+	if !catOK || !tagOK || !authorOK {
 		h.writePostList(w, r, nil, parsePage(q), parsePerPage(q), 0)
 		return
 	}
@@ -59,7 +64,7 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 		CategoryID: catID,
 		TagID:      tagID,
 		Featured:   parseFeatured(q.Get("featured")),
-		AuthorID:   q.Get("author"),
+		AuthorID:   authorID,
 		Search:     q.Get("q"),
 	}
 	query.Sort, query.SortDesc = parseSort(q.Get("sort"))
@@ -152,6 +157,12 @@ func (h *Handler) resolveTagFilter(ctx context.Context, slug string) (id string,
 		return "", false, err
 	}
 	return tg.ID, true, nil
+}
+
+// resolveAuthorFilter resolves an optional "author" query parameter (user
+// id or public author slug) to a user id.
+func (h *Handler) resolveAuthorFilter(ctx context.Context, author string) (id string, ok bool, err error) {
+	return h.content.ResolveAuthorFilter(ctx, author)
 }
 
 // parsePage parses the "page" query parameter, defaulting to 1 for an

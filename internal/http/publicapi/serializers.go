@@ -16,11 +16,16 @@ type metaDTO struct {
 	TotalPages int `json:"total_pages"`
 }
 
-// authorDTO is the minimal {id,name} author projection embedded in a post
-// — never email or role.
+// authorDTO is the public author projection embedded in a post and returned
+// by /api/v1/authors — never email or role.
 type authorDTO struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Slug     string  `json:"slug"`
+	Bio      *string `json:"bio"`
+	Website  *string `json:"website"`
+	Location *string `json:"location"`
+	Avatar   *string `json:"avatar"`
 }
 
 // termDTO is the compact {id,name,slug} shape used for a post's
@@ -81,7 +86,7 @@ func toPostDTO(p content.Post) postDTO {
 		Excerpt:     p.Row.Excerpt,
 		ContentHTML: p.Row.ContentHTML,
 		CoverImage:  toCoverImageDTO(p.CoverImage),
-		Author:      authorDTO{ID: p.Author.ID, Name: p.Author.Name},
+		Author:      toAuthorDTO(p.Author),
 		Categories:  toTermDTOs(p.Categories),
 		Tags:        toTagTermDTOs(p.Tags),
 		Featured:    p.Row.Featured,
@@ -93,6 +98,18 @@ func toPostDTO(p content.Post) postDTO {
 		},
 		PublishedAt: p.Row.PublishedAt,
 		UpdatedAt:   p.Row.UpdatedAt,
+	}
+}
+
+func toAuthorDTO(a content.Author) authorDTO {
+	return authorDTO{
+		ID:       a.ID,
+		Name:     a.Name,
+		Slug:     a.Slug,
+		Bio:      stringOrNil(a.Bio),
+		Website:  stringOrNil(a.Website),
+		Location: stringOrNil(a.Location),
+		Avatar:   stringOrNil(a.AvatarURL),
 	}
 }
 

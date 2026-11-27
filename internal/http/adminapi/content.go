@@ -68,15 +68,16 @@ func toTagDTO(t store.Tag) tagDTO {
 	}
 }
 
-// authorDTO is the minimal {id,name} user projection used by the authors
-// endpoint and embedded in post summaries. It never carries email or role.
+// authorDTO is the admin author projection used by the authors endpoint
+// and embedded in post summaries. It never carries email or role.
 type authorDTO struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Slug string `json:"slug"`
 }
 
-// listAuthors (GET /authors) returns active users as {id,name} for the
-// author selector. Available to any authenticated user.
+// listAuthors (GET /authors) returns active users for the author selector.
+// Available to any authenticated user.
 func (h *Handler) listAuthors(w http.ResponseWriter, r *http.Request) {
 	authors, err := h.content.ListAuthors(r.Context())
 	if err != nil {
@@ -85,7 +86,7 @@ func (h *Handler) listAuthors(w http.ResponseWriter, r *http.Request) {
 	}
 	dtos := make([]authorDTO, 0, len(authors))
 	for _, a := range authors {
-		dtos = append(dtos, authorDTO{ID: a.ID, Name: a.Name})
+		dtos = append(dtos, authorDTO{ID: a.ID, Name: a.Name, Slug: a.Slug})
 	}
 	middleware.WriteJSON(w, http.StatusOK, map[string][]authorDTO{"authors": dtos})
 }

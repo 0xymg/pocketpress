@@ -14,7 +14,15 @@ const samplePost: Post = {
     height: null,
     alt: "Cover",
   },
-  author: { id: "u1", name: "Ada" },
+  author: {
+    id: "u1",
+    name: "Ada",
+    slug: "ada",
+    bio: null,
+    website: null,
+    location: null,
+    avatar: null,
+  },
   categories: [{ id: "c1", name: "News", slug: "news" }],
   tags: [{ id: "t1", name: "Go", slug: "go" }],
   featured: true,
@@ -62,6 +70,33 @@ describe("PocketPress client", () => {
     });
     await client.posts.list();
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("lists and gets authors", async () => {
+    const author = {
+      id: "u1",
+      name: "Ada",
+      slug: "ada",
+      bio: "Writer",
+      website: "https://example.com",
+      location: "London",
+      avatar: null,
+    };
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/authors")) {
+        return jsonResponse({ data: [author] });
+      }
+      expect(url).toBe("https://cms.example.com/api/v1/authors/ada");
+      return jsonResponse({ data: author });
+    });
+    const client = new PocketPress({
+      baseUrl: "https://cms.example.com",
+      fetch: fetchMock,
+    });
+    expect(await client.authors.list()).toEqual([author]);
+    expect(await client.authors.get("ada")).toEqual(author);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("lists posts with query params", async () => {

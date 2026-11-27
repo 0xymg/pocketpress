@@ -14,7 +14,7 @@ import "github.com/pocketpress/pocketpress/internal/store"
 // post, but a nil embedded object is a safer failure mode here than a 500.
 type Post struct {
 	Row        store.Post
-	Author     store.User
+	Author     Author
 	Categories []store.Category
 	Tags       []store.Tag
 	CoverImage *store.Media
@@ -111,9 +111,17 @@ type PostUpdateInput struct {
 	CurrentUserID  string
 }
 
-// Author is the minimal user projection exposed by the authors endpoint and
-// embedded in post summaries: id and name only, never email or role.
+// Author is the public user projection exposed by the authors endpoint and
+// embedded in post summaries: identity and profile fields only — never
+// email, role, or password material.
 type Author struct {
-	ID   string
-	Name string
+	ID       string
+	Name     string
+	Slug     string
+	Bio      string
+	Website  string
+	Location string
+	// AvatarURL is a relative /api/files/... path when the user has an
+	// avatar media id set; empty when unset or the media row is missing.
+	AvatarURL string
 }

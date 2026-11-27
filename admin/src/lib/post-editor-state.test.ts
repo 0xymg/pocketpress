@@ -10,7 +10,7 @@ function fakePost(overrides: Partial<PostFull> = {}): PostFull {
 		status: 'draft',
 		excerpt: 'An excerpt',
 		featured: false,
-		author: { id: 'author-1', name: 'Ada Lovelace' },
+		author: { id: 'author-1', name: 'Ada Lovelace', slug: 'ada-lovelace' },
 		categories: [{ id: 'cat-1', name: 'News', slug: 'news' }],
 		tags: [{ id: 'tag-1', name: 'Launch', slug: 'launch' }],
 		scheduled_for: null,

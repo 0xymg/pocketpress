@@ -72,6 +72,10 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/tags/{slug}", h.gate(h.getTag))
 	mux.Handle("GET /api/v1/tags/{slug}/posts", h.gate(h.tagPosts))
 
+	mux.Handle("GET /api/v1/authors", h.gate(h.listAuthors))
+	mux.Handle("GET /api/v1/authors/{slug}", h.gate(h.getAuthor))
+	mux.Handle("GET /api/v1/authors/{slug}/posts", h.gate(h.authorPosts))
+
 	// Syndication feeds (v0.2): newest published posts as RSS 2.0 / Atom 1.0.
 	mux.Handle("GET /api/v1/feed.rss", h.gate(h.feedRSS))
 	mux.Handle("GET /api/v1/feed.atom", h.gate(h.feedAtom))
@@ -205,6 +209,10 @@ func (h *Handler) categoryNotFound(w http.ResponseWriter) {
 
 func (h *Handler) tagNotFound(w http.ResponseWriter) {
 	h.writeError(w, http.StatusNotFound, "tag_not_found", "The requested tag was not found.")
+}
+
+func (h *Handler) authorNotFound(w http.ResponseWriter) {
+	h.writeError(w, http.StatusNotFound, "author_not_found", "The requested author was not found.")
 }
 
 // serverError logs the underlying error and writes a generic 500 envelope,

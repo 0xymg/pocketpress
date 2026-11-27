@@ -6,10 +6,16 @@ export interface Meta {
   total_pages: number;
 }
 
-/** Public author summary embedded in a post. */
+/** Public author profile embedded in a post and returned by /api/v1/authors. */
 export interface Author {
   id: string;
   name: string;
+  slug: string;
+  bio: string | null;
+  website: string | null;
+  location: string | null;
+  /** Relative `/api/files/...` URL, or null. */
+  avatar: string | null;
 }
 
 /** Category or tag reference embedded in a post. */
