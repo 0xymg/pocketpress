@@ -109,7 +109,7 @@ type PostFilter struct {
 	TagID      string // "" = any
 	AuthorID   string // "" = any
 	Featured   *bool  // nil = any
-	Search     string // "" = any; case-insensitive title substring
+	Search     string // "" = any; FTS5 over title, excerpt, content_text
 
 	// PublishedBefore, when non-nil, restricts results to rows with a
 	// non-NULL published_at at or before this time — the public API's
@@ -297,21 +297,28 @@ func PostSlugExists(ctx context.Context, db DBTX, slug, excludeID string) (bool,
 // ListPosts returns one page of posts matching filter, ordered by sort
 // (sortDesc = descending). limit/offset paginate. The id tiebreaker keeps
 // ordering stable when several posts share a sort value.
+//
+// When filter.Search is non-empty, results are restricted via the posts_fts
+// FTS5 index (title, excerpt, content_text) and ordered primarily by
+// BM25 relevance (title weighted highest), then by the requested sort.
 func ListPosts(ctx context.Context, db DBTX, filter PostFilter, sort PostSortField, sortDesc bool, limit, offset int) ([]Post, error) {
-	where, args := postFilterClause(filter)
+	from, where, args, useFTS := postQueryParts(filter)
 	direction := "ASC"
 	if sortDesc {
 		direction = "DESC"
 	}
 
-	orderBy := sortColumn(sort)
+	orderBy := sortColumn(sort, useFTS)
+	if useFTS {
+		// bm25 weights: title=10, excerpt=5, content_text=1. Lower is better.
+		orderBy = `bm25(posts_fts, 10.0, 5.0, 1.0) ASC, ` + orderBy + ` ` + direction + `, posts.id ` + direction
+	} else {
+		orderBy = orderBy + ` ` + direction + `, id ` + direction
+	}
 
-	query := `
-		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
-			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, scheduled_for, published_at, created_at, updated_at
-		FROM posts` + where +
-		` ORDER BY ` + orderBy + ` ` + direction + `, id ` + direction +
+	cols := postSelectColumns(useFTS)
+	query := `SELECT ` + cols + ` FROM ` + from + where +
+		` ORDER BY ` + orderBy +
 		` LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
@@ -338,22 +345,22 @@ func ListPosts(ctx context.Context, db DBTX, filter PostFilter, sort PostSortFie
 // CountPosts returns how many posts match filter (ignoring pagination), for
 // list response metadata.
 func CountPosts(ctx context.Context, db DBTX, filter PostFilter) (int, error) {
-	where, args := postFilterClause(filter)
+	from, where, args, _ := postQueryParts(filter)
 	var count int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM posts`+where, args...).Scan(&count); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+from+where, args...).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count posts: %w", err)
 	}
 	return count, nil
 }
 
-// postFilterClause builds the shared WHERE clause (and its args) for
-// ListPosts and CountPosts, so both apply identical filtering.
-func postFilterClause(filter PostFilter) (string, []any) {
+// postQueryParts builds the FROM/WHERE fragments (and args) shared by
+// ListPosts and CountPosts. useFTS is true when the query joins posts_fts.
+func postQueryParts(filter PostFilter) (from, where string, args []any, useFTS bool) {
+	from = "posts"
 	var conds []string
-	var args []any
 
 	if filter.Status != "" {
-		conds = append(conds, "status = ?")
+		conds = append(conds, "posts.status = ?")
 		args = append(args, filter.Status)
 	}
 	if filter.CategoryID != "" {
@@ -365,43 +372,68 @@ func postFilterClause(filter PostFilter) (string, []any) {
 		args = append(args, filter.TagID)
 	}
 	if filter.AuthorID != "" {
-		conds = append(conds, "author = ?")
+		conds = append(conds, "posts.author = ?")
 		args = append(args, filter.AuthorID)
 	}
 	if filter.Featured != nil {
-		conds = append(conds, "featured = ?")
+		conds = append(conds, "posts.featured = ?")
 		args = append(args, boolToInt(*filter.Featured))
 	}
 	if filter.Search != "" {
-		// INSTR over lowercased text gives a case-insensitive substring match
-		// without exposing LIKE wildcard metacharacters in the search term.
-		conds = append(conds, "INSTR(LOWER(title), LOWER(?)) > 0")
-		args = append(args, filter.Search)
+		ftsExpr, ok := BuildFTSQuery(filter.Search)
+		if !ok {
+			// Punctuation-only / empty-after-sanitize: match nothing.
+			conds = append(conds, "1 = 0")
+		} else {
+			useFTS = true
+			from = "posts JOIN posts_fts ON posts.rowid = posts_fts.rowid"
+			conds = append(conds, "posts_fts MATCH ?")
+			args = append(args, ftsExpr)
+		}
 	}
 	if filter.PublishedBefore != nil {
-		conds = append(conds, "published_at IS NOT NULL AND published_at <= ?")
+		conds = append(conds, "posts.published_at IS NOT NULL AND posts.published_at <= ?")
 		args = append(args, formatTime(*filter.PublishedBefore))
 	}
 
 	if len(conds) == 0 {
-		return "", args
+		return from, "", args, useFTS
 	}
-	return " WHERE " + strings.Join(conds, " AND "), args
+	return from, " WHERE " + strings.Join(conds, " AND "), args, useFTS
+}
+
+// postSelectColumns returns the SELECT list for ListPosts. When useFTS is
+// true, columns are qualified with posts. so they do not collide with the
+// identically named FTS columns.
+func postSelectColumns(useFTS bool) string {
+	cols := `id, title, slug, excerpt, content_json, content_html, content_text,
+			cover_image, status, author, featured, seo_title, seo_description,
+			canonical_url, og_image, scheduled_for, published_at, created_at, updated_at`
+	if !useFTS {
+		return cols
+	}
+	return `posts.id, posts.title, posts.slug, posts.excerpt, posts.content_json, posts.content_html, posts.content_text,
+			posts.cover_image, posts.status, posts.author, posts.featured, posts.seo_title, posts.seo_description,
+			posts.canonical_url, posts.og_image, posts.scheduled_for, posts.published_at, posts.created_at, posts.updated_at`
 }
 
 // sortColumn maps a PostSortField to its ORDER BY column expression. Title
 // sorts case-insensitively (COLLATE NOCASE), matching how categories and
 // tags are already ordered by name elsewhere in this package; updated_at
 // and published_at are RFC3339 UTC TEXT columns, which sort correctly
-// lexicographically.
-func sortColumn(sort PostSortField) string {
+// lexicographically. qualify prefixes posts. when joining FTS.
+func sortColumn(sort PostSortField, qualify bool) string {
+	prefix := ""
+	if qualify {
+		prefix = "posts."
+	}
 	switch sort {
 	case PostSortPublishedAt:
-		return "published_at"
+		return prefix + "published_at"
 	case PostSortTitle:
-		return "title COLLATE NOCASE"
+		return prefix + "title COLLATE NOCASE"
 	default:
-		return "updated_at"
+		return prefix + "updated_at"
 	}
 }
 

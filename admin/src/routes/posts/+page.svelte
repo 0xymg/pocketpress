@@ -499,7 +499,7 @@
 		<label for="post-search" class="sr-only">Search</label>
 		<input
 			id="post-search"
-			placeholder="Search by Title"
+			placeholder="Search posts…"
 			value={searchInput}
 			oninput={(event) => handleSearchInput(event.currentTarget.value)}
 			class="h-11 w-full rounded-[3px] bg-stone-50 pl-10 pr-4 text-[13px] text-stone-900 outline-none transition-colors placeholder:text-stone-400 hover:bg-stone-100 focus:bg-stone-100"

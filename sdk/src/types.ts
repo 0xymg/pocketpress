@@ -84,6 +84,8 @@ export interface PostListParams {
   featured?: boolean;
   author?: string;
   sort?: PostSort;
+  /** Full-text search (`q`) over title, excerpt, and body. */
+  q?: string;
 }
 
 export interface PostListResponse {

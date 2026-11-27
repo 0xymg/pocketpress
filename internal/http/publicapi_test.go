@@ -437,6 +437,57 @@ func TestPublicPostSortVariants(t *testing.T) {
 	assertOrder("-title", "/api/v1/posts?sort=-title", "charlie", "bravo", "alpha")
 }
 
+// TestPublicPostFullTextSearch covers GET /api/v1/posts?q= — FTS over
+// title/excerpt/body, draft exclusion, and punctuation-only empty results.
+func TestPublicPostFullTextSearch(t *testing.T) {
+	env := newTestEnv(t, false)
+	env.setup(t)
+	now := time.Now().UTC()
+
+	guide := env.createPost(t, map[string]any{
+		"title": "Alpha Guide", "slug": "alpha-guide",
+		"content_html": "<p>full text search rocks in production</p>",
+	})
+	env.publishPost(t, guide["id"].(string), now.Add(-2*time.Minute))
+
+	tips := env.createPost(t, map[string]any{
+		"title": "Search Tips", "slug": "search-tips",
+		"content_html": "<p>alpha techniques for finding content</p>",
+	})
+	env.publishPost(t, tips["id"].(string), now.Add(-time.Minute))
+
+	draft := env.createPost(t, map[string]any{
+		"title": "Hidden Draft", "slug": "hidden-draft",
+		"content_html": "<p>production secrets</p>",
+	})
+	_ = draft
+
+	assertSlugs := func(name, path string, want ...string) {
+		t.Helper()
+		resp := env.do(t, http.MethodGet, path, nil)
+		raw, m := readJSON(t, resp)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: status = %d, want 200; body = %s", name, resp.StatusCode, raw)
+		}
+		got := slugsOf(t, dataArr(t, m))
+		if len(got) != len(want) {
+			t.Fatalf("%s: slugs = %v, want %v", name, got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("%s: slugs = %v, want %v", name, got, want)
+			}
+		}
+	}
+
+	// Body match; draft with the same term must not appear.
+	assertSlugs("q=production", "/api/v1/posts?q=production", "alpha-guide")
+	// Title match ranks above body match for "search".
+	assertSlugs("q=search", "/api/v1/posts?q=search", "search-tips", "alpha-guide")
+	assertSlugs("q=alph", "/api/v1/posts?q=alph", "alpha-guide", "search-tips")
+	assertSlugs("punctuation", "/api/v1/posts?q=%22+*+OR")
+}
+
 // ---------------------------------------------------------------------------
 // ETag / caching
 // ---------------------------------------------------------------------------

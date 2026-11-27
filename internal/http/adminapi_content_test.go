@@ -588,7 +588,7 @@ func TestPostListFiltersAndPagination(t *testing.T) {
 		t.Fatalf("category filter total = %v, want 1", m["meta"].(map[string]any)["total_items"])
 	}
 
-	// Search (case-insensitive title substring).
+	// Search (FTS prefix over title/excerpt/body).
 	resp = env.do(t, http.MethodGet, "/api/admin/v1/posts?search=ALPH", nil)
 	_, m = readJSON(t, resp)
 	if m["meta"].(map[string]any)["total_items"].(float64) != 1 {

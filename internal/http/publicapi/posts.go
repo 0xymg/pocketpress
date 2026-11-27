@@ -60,6 +60,7 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 		TagID:      tagID,
 		Featured:   parseFeatured(q.Get("featured")),
 		AuthorID:   q.Get("author"),
+		Search:     q.Get("q"),
 	}
 	query.Sort, query.SortDesc = parseSort(q.Get("sort"))
 

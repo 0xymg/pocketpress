@@ -223,7 +223,7 @@ func TestListPostsFilters(t *testing.T) {
 	assertCount("status draft", store.PostFilter{Status: store.PostStatusDraft}, 2)
 	assertCount("status archived", store.PostFilter{Status: store.PostStatusArchived}, 1)
 	assertCount("category News", store.PostFilter{CategoryID: cat.ID}, 1)
-	assertCount("search case-insensitive", store.PostFilter{Search: "eta"}, 1) // matches "Beta"
+	assertCount("search case-insensitive prefix", store.PostFilter{Search: "bet"}, 1) // matches "Beta"
 	assertCount("search miss", store.PostFilter{Search: "zzz"}, 0)
 
 	// Pagination: page size 2 over 3 items returns 2 then 1.

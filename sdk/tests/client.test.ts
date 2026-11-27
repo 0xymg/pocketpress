@@ -49,7 +49,7 @@ describe("PocketPress client", () => {
   it("lists posts with query params", async () => {
     const fetchMock = vi.fn(async (input: string | URL) => {
       expect(String(input)).toBe(
-        "https://cms.example.com/api/v1/posts?page=2&per_page=10&featured=true&sort=-published_at",
+        "https://cms.example.com/api/v1/posts?page=2&per_page=10&featured=true&sort=-published_at&q=search",
       );
       return jsonResponse({
         data: [samplePost],
@@ -66,6 +66,7 @@ describe("PocketPress client", () => {
       per_page: 10,
       featured: true,
       sort: "-published_at",
+      q: "search",
     });
     expect(result.data).toHaveLength(1);
     expect(result.meta.page).toBe(2);

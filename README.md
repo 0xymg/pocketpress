@@ -99,10 +99,13 @@ The public content API is at `/api/v1`. See `api/openapi.yaml` for the complete 
 
 ```bash
 curl https://cms.example.com/api/v1/posts
+curl 'https://cms.example.com/api/v1/posts?q=pocketpress'
 curl https://cms.example.com/api/v1/feed.rss
 curl https://cms.example.com/api/v1/feed.atom
 curl https://cms.example.com/api/v1/sitemap.xml
 ```
+
+Full-text search (`q`) matches title, excerpt, and body plain text (SQLite FTS5). Results are ranked by relevance when `q` is set.
 
 **Response structure:**
 

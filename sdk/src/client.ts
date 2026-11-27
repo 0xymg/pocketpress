@@ -196,6 +196,7 @@ class PostsResource {
       featured: params.featured,
       author: params.author,
       sort: params.sort,
+      q: params.q,
     });
     return this.client.requestJson<PostListResponse>(`/api/v1/posts${qs}`);
   }
@@ -286,6 +287,7 @@ class CategoriesResource {
       featured: params.featured,
       author: params.author,
       sort: params.sort,
+      q: params.q,
     });
     return this.client.requestJson<PostListResponse>(
       `/api/v1/categories/${encodePathSegment(slug)}/posts${qs}`,
@@ -324,6 +326,7 @@ class TagsResource {
       featured: params.featured,
       author: params.author,
       sort: params.sort,
+      q: params.q,
     });
     return this.client.requestJson<PostListResponse>(
       `/api/v1/tags/${encodePathSegment(slug)}/posts${qs}`,

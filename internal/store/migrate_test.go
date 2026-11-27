@@ -8,7 +8,7 @@ import (
 )
 
 // TestUpAppliesInitMigrationAndIsIdempotent confirms Up applies every
-// embedded migration (0001_init, then 0002_media) in order on a fresh
+// embedded migration (0001_init, 0002_media, 0003_fts) in order on a fresh
 // database, and that calling Up again applies nothing.
 func TestUpAppliesInitMigrationAndIsIdempotent(t *testing.T) {
 	st, err := store.Open(t.TempDir())
@@ -23,13 +23,19 @@ func TestUpAppliesInitMigrationAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.Up() error = %v", err)
 	}
-	wantApplied := []string{"0001_init", "0002_media"}
-	if len(applied) != len(wantApplied) || applied[0] != wantApplied[0] || applied[1] != wantApplied[1] {
+	wantApplied := []string{"0001_init", "0002_media", "0003_fts"}
+	if len(applied) != len(wantApplied) {
 		t.Fatalf("store.Up() applied = %v, want %v", applied, wantApplied)
+	}
+	for i := range wantApplied {
+		if applied[i] != wantApplied[i] {
+			t.Fatalf("store.Up() applied = %v, want %v", applied, wantApplied)
+		}
 	}
 
 	assertTableExists(t, st, "posts")
 	assertTableExists(t, st, "media")
+	assertTableExists(t, st, "posts_fts")
 
 	appliedAgain, err := store.Up(ctx, st.DB())
 	if err != nil {
@@ -57,47 +63,67 @@ func TestUpDownUpCycle(t *testing.T) {
 	}
 	assertTableExists(t, st, "posts")
 	assertTableExists(t, st, "media")
+	assertTableExists(t, st, "posts_fts")
 
-	// First Down reverts 0002_media only: media goes away, posts (from
-	// 0001_init) is untouched.
+	// First Down reverts 0003_fts only.
 	reverted, err := store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() error = %v", err)
 	}
-	if reverted != "0002_media" {
-		t.Fatalf("store.Down() reverted = %q, want %q", reverted, "0002_media")
+	if reverted != "0003_fts" {
+		t.Fatalf("store.Down() reverted = %q, want %q", reverted, "0003_fts")
 	}
-	assertTableMissing(t, st, "media")
+	assertTableMissing(t, st, "posts_fts")
+	assertTableExists(t, st, "media")
 	assertTableExists(t, st, "posts")
 
-	// Second Down reverts 0001_init: posts goes away too.
+	// Second Down reverts 0002_media only: media goes away, posts (from
+	// 0001_init) is untouched.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (second migration) error = %v", err)
 	}
+	if reverted != "0002_media" {
+		t.Fatalf("store.Down() (second migration) reverted = %q, want %q", reverted, "0002_media")
+	}
+	assertTableMissing(t, st, "media")
+	assertTableExists(t, st, "posts")
+
+	// Third Down reverts 0001_init: posts goes away too.
+	reverted, err = store.Down(ctx, st.DB())
+	if err != nil {
+		t.Fatalf("store.Down() (third migration) error = %v", err)
+	}
 	if reverted != "0001_init" {
-		t.Fatalf("store.Down() (second migration) reverted = %q, want %q", reverted, "0001_init")
+		t.Fatalf("store.Down() (third migration) reverted = %q, want %q", reverted, "0001_init")
 	}
 	assertTableMissing(t, st, "posts")
 
 	// Down with nothing left applied is a no-op, not an error.
 	revertedAgain, err := store.Down(ctx, st.DB())
 	if err != nil {
-		t.Fatalf("store.Down() (third call) error = %v", err)
+		t.Fatalf("store.Down() (fourth call) error = %v", err)
 	}
 	if revertedAgain != "" {
-		t.Fatalf("store.Down() (third call) reverted = %q, want \"\"", revertedAgain)
+		t.Fatalf("store.Down() (fourth call) reverted = %q, want \"\"", revertedAgain)
 	}
 
 	appliedAgain, err := store.Up(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Up() (after down) error = %v", err)
 	}
-	if len(appliedAgain) != 2 || appliedAgain[0] != "0001_init" || appliedAgain[1] != "0002_media" {
-		t.Fatalf("store.Up() (after down) applied = %v, want [0001_init 0002_media]", appliedAgain)
+	wantAgain := []string{"0001_init", "0002_media", "0003_fts"}
+	if len(appliedAgain) != len(wantAgain) {
+		t.Fatalf("store.Up() (after down) applied = %v, want %v", appliedAgain, wantAgain)
+	}
+	for i := range wantAgain {
+		if appliedAgain[i] != wantAgain[i] {
+			t.Fatalf("store.Up() (after down) applied = %v, want %v", appliedAgain, wantAgain)
+		}
 	}
 	assertTableExists(t, st, "posts")
 	assertTableExists(t, st, "media")
+	assertTableExists(t, st, "posts_fts")
 }
 
 func assertTableExists(t *testing.T, st *store.Store, name string) {
