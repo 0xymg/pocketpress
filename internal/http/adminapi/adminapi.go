@@ -106,6 +106,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/admin/v1/tags/{id}", user(h.updateTag))
 	mux.Handle("DELETE /api/admin/v1/tags/{id}", user(h.deleteTag))
 
+	// Scheduling calendar: date-range view of scheduled + published posts.
+	mux.Handle("GET /api/admin/v1/calendar", user(h.listCalendar))
+
 	mux.Handle("GET /api/admin/v1/posts", user(h.listPosts))
 	mux.Handle("POST /api/admin/v1/posts", user(h.createPost))
 	// Import routes are static paths and must be registered alongside the

@@ -95,20 +95,22 @@
 					</p>
 				</Card.Content>
 			</Card.Root>
-			<Card.Root>
-				<Card.Content class="pt-6">
-					<p class="text-sm text-stone-500">Scheduled</p>
-					<p class="mt-1 text-3xl font-semibold text-stone-900">
-						{#if postsStatus === 'success' && scheduledCount !== null}
-							{scheduledCount}
-						{:else if postsStatus === 'error'}
-							<span class="text-base text-stone-400">—</span>
-						{:else}
-							<span class="text-base text-stone-400">…</span>
-						{/if}
-					</p>
-				</Card.Content>
-			</Card.Root>
+			<a href="/calendar" class="block no-underline">
+				<Card.Root class="transition-colors hover:border-stone-300">
+					<Card.Content class="pt-6">
+						<p class="text-sm text-stone-500">Scheduled</p>
+						<p class="mt-1 text-3xl font-semibold text-stone-900">
+							{#if postsStatus === 'success' && scheduledCount !== null}
+								{scheduledCount}
+							{:else if postsStatus === 'error'}
+								<span class="text-base text-stone-400">—</span>
+							{:else}
+								<span class="text-base text-stone-400">…</span>
+							{/if}
+						</p>
+					</Card.Content>
+				</Card.Root>
+			</a>
 			<Card.Root>
 				<Card.Content class="pt-6">
 					<p class="text-sm text-stone-500">Published</p>
