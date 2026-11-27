@@ -27,6 +27,7 @@ function summary(overrides: Record<string, unknown> = {}) {
 		status: 'draft',
 		excerpt: '',
 		featured: false,
+		locale: 'en',
 		author: { id: '1', name: 'Ada Lovelace', slug: 'ada-lovelace' },
 		categories: [],
 		tags: [],

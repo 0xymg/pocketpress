@@ -15,6 +15,7 @@ type Settings struct {
 	SiteURL            string
 	AdminTitle         string
 	Locale             string
+	AvailableLocales   []string // BCP 47 tags the site publishes content in
 	Timezone           string
 	DefaultAuthor      string // user ID, "" means unset (NULL in storage)
 	CORSOrigins        []string
@@ -33,18 +34,29 @@ const settingsID = 1
 // development plan's Phase 2 acceptance criteria) hold at the storage
 // layer instead of relying only on an application-level check.
 func CreateSettings(ctx context.Context, db *sql.DB, s Settings) (Settings, error) {
+	if len(s.AvailableLocales) == 0 {
+		if s.Locale != "" {
+			s.AvailableLocales = []string{s.Locale}
+		} else {
+			s.AvailableLocales = []string{"en"}
+		}
+	}
 	corsOrigins, err := marshalCORSOrigins(s.CORSOrigins)
+	if err != nil {
+		return Settings{}, err
+	}
+	availableLocales, err := marshalStringList(s.AvailableLocales)
 	if err != nil {
 		return Settings{}, err
 	}
 
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO settings (
-			id, site_name, site_url, admin_title, locale, timezone,
+			id, site_name, site_url, admin_title, locale, available_locales, timezone,
 			default_author, cors_origins, public_api_enabled,
 			preview_url_template, webhook_user_agent
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		settingsID, s.SiteName, s.SiteURL, s.AdminTitle, s.Locale, s.Timezone,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		settingsID, s.SiteName, s.SiteURL, s.AdminTitle, s.Locale, availableLocales, s.Timezone,
 		nullString(s.DefaultAuthor), corsOrigins, boolToInt(s.PublicAPIEnabled),
 		nullString(s.PreviewURLTemplate), s.WebhookUserAgent,
 	)
@@ -59,7 +71,7 @@ func CreateSettings(ctx context.Context, db *sql.DB, s Settings) (Settings, erro
 // setup has not created it yet.
 func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
 	row := db.QueryRowContext(ctx, `
-		SELECT site_name, site_url, admin_title, locale, timezone,
+		SELECT site_name, site_url, admin_title, locale, available_locales, timezone,
 			default_author, cors_origins, public_api_enabled,
 			preview_url_template, webhook_user_agent
 		FROM settings
@@ -69,13 +81,14 @@ func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
 
 	var (
 		s                  Settings
+		availableLocales   string
 		defaultAuthor      sql.NullString
 		corsOrigins        string
 		publicAPIEnabled   int
 		previewURLTemplate sql.NullString
 	)
 
-	err := row.Scan(&s.SiteName, &s.SiteURL, &s.AdminTitle, &s.Locale, &s.Timezone,
+	err := row.Scan(&s.SiteName, &s.SiteURL, &s.AdminTitle, &s.Locale, &availableLocales, &s.Timezone,
 		&defaultAuthor, &corsOrigins, &publicAPIEnabled, &previewURLTemplate, &s.WebhookUserAgent,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -89,6 +102,9 @@ func GetSettings(ctx context.Context, db *sql.DB) (Settings, error) {
 	s.PublicAPIEnabled = publicAPIEnabled != 0
 	s.PreviewURLTemplate = stringOrEmpty(previewURLTemplate)
 
+	if s.AvailableLocales, err = unmarshalStringList(availableLocales); err != nil {
+		return Settings{}, fmt.Errorf("unmarshal available_locales: %w", err)
+	}
 	if s.CORSOrigins, err = unmarshalCORSOrigins(corsOrigins); err != nil {
 		return Settings{}, err
 	}
@@ -103,14 +119,18 @@ func UpdateSettings(ctx context.Context, db *sql.DB, s Settings) error {
 	if err != nil {
 		return err
 	}
+	availableLocales, err := marshalStringList(s.AvailableLocales)
+	if err != nil {
+		return err
+	}
 
 	res, err := db.ExecContext(ctx, `
 		UPDATE settings SET
-			site_name = ?, site_url = ?, admin_title = ?, locale = ?, timezone = ?,
+			site_name = ?, site_url = ?, admin_title = ?, locale = ?, available_locales = ?, timezone = ?,
 			default_author = ?, cors_origins = ?, public_api_enabled = ?,
 			preview_url_template = ?, webhook_user_agent = ?
 		WHERE id = ?`,
-		s.SiteName, s.SiteURL, s.AdminTitle, s.Locale, s.Timezone,
+		s.SiteName, s.SiteURL, s.AdminTitle, s.Locale, availableLocales, s.Timezone,
 		nullString(s.DefaultAuthor), corsOrigins, boolToInt(s.PublicAPIEnabled),
 		nullString(s.PreviewURLTemplate), s.WebhookUserAgent, settingsID,
 	)
@@ -146,20 +166,35 @@ func IsInitialized(ctx context.Context, db *sql.DB) (bool, error) {
 }
 
 func marshalCORSOrigins(origins []string) (string, error) {
-	if origins == nil {
-		origins = []string{}
-	}
-	b, err := json.Marshal(origins)
+	return marshalStringList(origins)
+}
+
+func unmarshalCORSOrigins(raw string) ([]string, error) {
+	origins, err := unmarshalStringList(raw)
 	if err != nil {
-		return "", fmt.Errorf("marshal cors_origins: %w", err)
+		return nil, fmt.Errorf("unmarshal cors_origins: %w", err)
+	}
+	return origins, nil
+}
+
+func marshalStringList(items []string) (string, error) {
+	if items == nil {
+		items = []string{}
+	}
+	b, err := json.Marshal(items)
+	if err != nil {
+		return "", fmt.Errorf("marshal string list: %w", err)
 	}
 	return string(b), nil
 }
 
-func unmarshalCORSOrigins(raw string) ([]string, error) {
-	var origins []string
-	if err := json.Unmarshal([]byte(raw), &origins); err != nil {
-		return nil, fmt.Errorf("unmarshal cors_origins: %w", err)
+func unmarshalStringList(raw string) ([]string, error) {
+	var items []string
+	if err := json.Unmarshal([]byte(raw), &items); err != nil {
+		return nil, err
 	}
-	return origins, nil
+	if items == nil {
+		items = []string{}
+	}
+	return items, nil
 }

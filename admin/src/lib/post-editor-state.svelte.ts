@@ -12,6 +12,8 @@ export interface PostFormSnapshot {
 	categoryIds: string[];
 	tagIds: string[];
 	featured: boolean;
+	locale: string;
+	translateOf: string;
 	seoTitle: string;
 	seoDescription: string;
 	canonicalUrl: string;
@@ -36,6 +38,8 @@ function snapshotsEqual(a: PostFormSnapshot, b: PostFormSnapshot): boolean {
 		a.status === b.status &&
 		a.authorId === b.authorId &&
 		a.featured === b.featured &&
+		a.locale === b.locale &&
+		a.translateOf === b.translateOf &&
 		a.seoTitle === b.seoTitle &&
 		a.seoDescription === b.seoDescription &&
 		a.canonicalUrl === b.canonicalUrl &&
@@ -84,6 +88,9 @@ export class PostEditorState {
 	categoryIds = $state<string[]>([]);
 	tagIds = $state<string[]>([]);
 	featured = $state(false);
+	locale = $state('en');
+	/** Post id to link as a translation of; "" means no link / unlink on save when changed from baseline. */
+	translateOf = $state('');
 	seoTitle = $state('');
 	seoDescription = $state('');
 	canonicalUrl = $state('');
@@ -109,6 +116,8 @@ export class PostEditorState {
 			categoryIds: this.categoryIds,
 			tagIds: this.tagIds,
 			featured: this.featured,
+			locale: this.locale,
+			translateOf: this.translateOf,
 			seoTitle: this.seoTitle,
 			seoDescription: this.seoDescription,
 			canonicalUrl: this.canonicalUrl,
@@ -180,6 +189,8 @@ export class PostEditorState {
 		this.categoryIds = [];
 		this.tagIds = [];
 		this.featured = false;
+		this.locale = 'en';
+		this.translateOf = '';
 		this.seoTitle = '';
 		this.seoDescription = '';
 		this.canonicalUrl = '';
@@ -216,6 +227,8 @@ export class PostEditorState {
 		this.categoryIds = post.categories.map((category) => category.id);
 		this.tagIds = post.tags.map((tag) => tag.id);
 		this.featured = post.featured;
+		this.locale = post.locale || 'en';
+		this.translateOf = '';
 		this.seoTitle = post.seo_title;
 		this.seoDescription = post.seo_description;
 		this.canonicalUrl = post.canonical_url;
@@ -248,6 +261,8 @@ export class PostEditorState {
 			categories: this.categoryIds,
 			tags: this.tagIds,
 			featured: this.featured,
+			locale: this.locale || undefined,
+			translate_of: this.translateOf.trim() === '' ? undefined : this.translateOf.trim(),
 			seo_title: this.seoTitle,
 			seo_description: this.seoDescription,
 			canonical_url: this.canonicalUrl,

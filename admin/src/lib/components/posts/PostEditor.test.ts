@@ -57,6 +57,7 @@ const EXISTING_POST = {
 	status: 'draft' as const,
 	excerpt: 'An excerpt',
 	featured: false,
+	locale: 'en',
 	author: { id: 'author-1', name: 'Ada Lovelace', slug: 'ada-lovelace' },
 	categories: [],
 	tags: [],
@@ -70,7 +71,9 @@ const EXISTING_POST = {
 	og_image: null,
 	seo_title: '',
 	seo_description: '',
-	canonical_url: ''
+	canonical_url: '',
+	translation_group: null,
+	translations: []
 };
 
 /** Same document, but scheduled — used for the "scheduled" action-bar and chip tests. */
@@ -120,6 +123,22 @@ function withReferenceRoutes(routes: Record<string, () => ReturnType<typeof json
 		'GET /api/admin/v1/categories': () => jsonResponse(200, true, REFERENCE_BODIES.categories),
 		'GET /api/admin/v1/tags': () => jsonResponse(200, true, REFERENCE_BODIES.tags),
 		'GET /api/admin/v1/authors': () => jsonResponse(200, true, REFERENCE_BODIES.authors),
+		'GET /api/admin/v1/settings': () =>
+			jsonResponse(200, true, {
+				settings: {
+					site_name: 'PocketPress',
+					site_url: 'https://example.com',
+					admin_title: 'PocketPress',
+					locale: 'en',
+					available_locales: ['en'],
+					timezone: 'UTC',
+					default_author: null,
+					cors_origins: [],
+					public_api_enabled: true,
+					preview_url_template: null,
+					webhook_user_agent: 'PocketPress'
+				}
+			}),
 		...routes
 	};
 }

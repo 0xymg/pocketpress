@@ -60,6 +60,12 @@ export interface Seo {
  * Published post shape from the public API.
  * Never includes admin-only fields (status, content_json, scheduled_for, etc.).
  */
+/** Published sibling in the same translation group. */
+export interface Translation {
+  locale: string;
+  slug: string;
+}
+
 export interface Post {
   id: string;
   title: string;
@@ -71,6 +77,10 @@ export interface Post {
   categories: Term[];
   tags: Term[];
   featured: boolean;
+  /** BCP 47 language tag (e.g. `en`, `tr`). */
+  locale: string;
+  /** Published translations of this post in other locales. */
+  translations: Translation[];
   seo: Seo;
   published_at: string;
   updated_at: string;
@@ -103,6 +113,8 @@ export interface PostListParams {
   tag?: string;
   featured?: boolean;
   author?: string;
+  /** BCP 47 language tag filter (e.g. `en`, `tr`). */
+  locale?: string;
   sort?: PostSort;
   /** Full-text search (`q`) over title, excerpt, and body. */
   q?: string;

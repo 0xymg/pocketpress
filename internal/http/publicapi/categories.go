@@ -62,7 +62,8 @@ func (h *Handler) categoryPosts(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
-	if !tagOK || !authorOK {
+	localeFilter, localeOK := parseLocaleFilter(q.Get("locale"))
+	if !tagOK || !authorOK || !localeOK {
 		h.writePostList(w, r, nil, parsePage(q), parsePerPage(q), 0)
 		return
 	}
@@ -74,6 +75,7 @@ func (h *Handler) categoryPosts(w http.ResponseWriter, r *http.Request) {
 		TagID:      tagID,
 		Featured:   parseFeatured(q.Get("featured")),
 		AuthorID:   authorID,
+		Locale:     localeFilter,
 		Search:     q.Get("q"),
 	}
 	query.Sort, query.SortDesc = parseSort(q.Get("sort"))

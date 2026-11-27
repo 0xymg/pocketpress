@@ -126,6 +126,7 @@ paths:
         - $ref: "#/components/parameters/TagFilter"
         - $ref: "#/components/parameters/FeaturedFilter"
         - $ref: "#/components/parameters/AuthorFilter"
+        - $ref: "#/components/parameters/LocaleFilter"
         - $ref: "#/components/parameters/SortFilter"
         - $ref: "#/components/parameters/SearchQuery"
       responses:
@@ -350,6 +351,7 @@ paths:
         - $ref: "#/components/parameters/TagFilter"
         - $ref: "#/components/parameters/FeaturedFilter"
         - $ref: "#/components/parameters/AuthorFilter"
+        - $ref: "#/components/parameters/LocaleFilter"
         - $ref: "#/components/parameters/SortFilter"
         - $ref: "#/components/parameters/SearchQuery"
       responses:
@@ -453,6 +455,7 @@ paths:
         - $ref: "#/components/parameters/CategoryFilter"
         - $ref: "#/components/parameters/TagFilter"
         - $ref: "#/components/parameters/FeaturedFilter"
+        - $ref: "#/components/parameters/LocaleFilter"
         - $ref: "#/components/parameters/SortFilter"
         - $ref: "#/components/parameters/SearchQuery"
       responses:
@@ -550,6 +553,7 @@ paths:
         - $ref: "#/components/parameters/CategoryFilter"
         - $ref: "#/components/parameters/FeaturedFilter"
         - $ref: "#/components/parameters/AuthorFilter"
+        - $ref: "#/components/parameters/LocaleFilter"
         - $ref: "#/components/parameters/SortFilter"
         - $ref: "#/components/parameters/SearchQuery"
       responses:
@@ -853,6 +857,18 @@ components:
       description: Restrict to posts by this author's user id or public author slug.
       schema:
         type: string
+    LocaleFilter:
+      name: locale
+      in: query
+      required: false
+      description: >-
+        Restrict to posts in this BCP 47 language tag (case-insensitive;
+        normalized to lowercase). A malformed tag yields an empty page
+        (not a 404). Also accepted on category/tag/author post lists,
+        feeds, and the sitemap.
+      schema:
+        type: string
+        example: en
     SortFilter:
       name: sort
       in: query
@@ -1015,6 +1031,8 @@ components:
         - categories
         - tags
         - featured
+        - locale
+        - translations
         - seo
         - published_at
         - updated_at
@@ -1046,6 +1064,17 @@ components:
             $ref: "#/components/schemas/Term"
         featured:
           type: boolean
+        locale:
+          type: string
+          description: BCP 47 language tag for this post (e.g. `en`, `tr`, `pt-br`).
+          example: en
+        translations:
+          type: array
+          description: >-
+            Published sibling posts in the same translation group
+            (other locales of this content). Empty when the post stands alone.
+          items:
+            $ref: "#/components/schemas/Translation"
         seo:
           $ref: "#/components/schemas/Seo"
         published_at:
@@ -1054,6 +1083,16 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    Translation:
+      type: object
+      required: [locale, slug]
+      properties:
+        locale:
+          type: string
+        slug:
+          type: string
+          description: Slug of the sibling translation (use with GET /api/v1/posts/{slug}).
 
     Category:
       type: object

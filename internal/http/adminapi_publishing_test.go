@@ -470,7 +470,7 @@ func TestSettingsGetAndValidation(t *testing.T) {
 	}
 	s := m["settings"].(map[string]any)
 	for _, k := range []string{
-		"site_name", "site_url", "admin_title", "locale", "timezone",
+		"site_name", "site_url", "admin_title", "locale", "available_locales", "timezone",
 		"default_author", "cors_origins", "public_api_enabled",
 		"preview_url_template", "webhook_user_agent",
 	} {
@@ -537,13 +537,32 @@ func TestSettingsGetAndValidation(t *testing.T) {
 	}
 }
 
-// TestSettingsPermissions confirms settings are owner-only (editor 403) and
-// require authentication (anon 401).
+// TestSettingsPermissions confirms GET settings is readable by any
+// authenticated user (editors need available_locales), PATCH remains
+// owner-only, and anon requests are 401.
 func TestSettingsPermissions(t *testing.T) {
 	env := newTestEnv(t, false)
 	env.setup(t)
 	editor := env.newEditorClient(t, "editor@example.com")
 
+	// Editor may GET settings (for available_locales in the post editor).
+	resp := env.doWith(t, editor, http.MethodGet, "/api/admin/v1/settings", nil)
+	_, m := readJSON(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET settings as editor = %d %v, want 200", resp.StatusCode, m)
+	}
+	if _, ok := m["settings"]; !ok {
+		t.Fatalf("GET settings as editor missing settings key: %v", m)
+	}
+
+	// Editor may not PATCH.
+	resp = env.doWith(t, editor, http.MethodPatch, "/api/admin/v1/settings", map[string]any{"site_name": "Nope"})
+	_, m = readJSON(t, resp)
+	if resp.StatusCode != http.StatusForbidden || errorCode(t, m) != "forbidden" {
+		t.Fatalf("PATCH settings as editor = %d %s, want 403 forbidden", resp.StatusCode, errorCode(t, m))
+	}
+
+	// Anon → 401 for both.
 	for _, tc := range []struct {
 		method string
 		body   any
@@ -551,14 +570,6 @@ func TestSettingsPermissions(t *testing.T) {
 		{http.MethodGet, nil},
 		{http.MethodPatch, map[string]any{"site_name": "Nope"}},
 	} {
-		// Editor → 403.
-		resp := env.doWith(t, editor, tc.method, "/api/admin/v1/settings", tc.body)
-		_, m := readJSON(t, resp)
-		if resp.StatusCode != http.StatusForbidden || errorCode(t, m) != "forbidden" {
-			t.Fatalf("%s settings as editor = %d %s, want 403 forbidden", tc.method, resp.StatusCode, errorCode(t, m))
-		}
-
-		// Anon → 401.
 		resp = env.doWith(t, &http.Client{}, tc.method, "/api/admin/v1/settings", tc.body)
 		_, m = readJSON(t, resp)
 		if resp.StatusCode != http.StatusUnauthorized || errorCode(t, m) != "unauthorized" {

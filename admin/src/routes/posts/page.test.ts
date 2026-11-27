@@ -30,6 +30,7 @@ const POST_A = {
 	status: 'draft' as const,
 	excerpt: 'A calm little blog backend.',
 	featured: false,
+	locale: 'en',
 	author: { id: 'owner-1', name: 'Ada Lovelace', slug: 'ada-lovelace' },
 	categories: [],
 	tags: [],

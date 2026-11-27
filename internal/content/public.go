@@ -19,6 +19,7 @@ type PublicPostListQuery struct {
 	TagID      string
 	Featured   *bool
 	AuthorID   string
+	Locale     string
 	Search     string
 	Sort       store.PostSortField
 	SortDesc   bool
@@ -42,6 +43,7 @@ func (s *Service) ListPublicPosts(ctx context.Context, q PublicPostListQuery) (P
 		TagID:           q.TagID,
 		Featured:        q.Featured,
 		AuthorID:        q.AuthorID,
+		Locale:          q.Locale,
 		Search:          q.Search,
 	}
 

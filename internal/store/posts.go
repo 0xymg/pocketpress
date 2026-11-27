@@ -38,47 +38,52 @@ func contentJSONOrDefault(s string) string {
 // Post is a row of the posts table (scalar columns only; the related
 // categories, tags and author are loaded separately).
 type Post struct {
-	ID             string
-	Title          string
-	Slug           string
-	Excerpt        string
-	ContentJSON    string
-	ContentHTML    string
-	ContentText    string
-	CoverImage     string
-	Status         string
-	Author         string // user id
-	Featured       bool
-	SEOTitle       string
-	SEODescription string
-	CanonicalURL   string
-	OGImage        string
-	ScheduledFor   *time.Time
-	PublishedAt    *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID               string
+	Title            string
+	Slug             string
+	Excerpt          string
+	ContentJSON      string
+	ContentHTML      string
+	ContentText      string
+	CoverImage       string
+	Status           string
+	Author           string // user id
+	Featured         bool
+	SEOTitle         string
+	SEODescription   string
+	CanonicalURL     string
+	OGImage          string
+	Locale           string // BCP 47 language tag (e.g. "en", "tr")
+	TranslationGroup string // "" when the post stands alone
+	ScheduledFor     *time.Time
+	PublishedAt      *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // NewPost holds the writable fields for CreatePost. ID and timestamps are set
 // by CreatePost itself. CoverImage/OGImage hold a media.id ("" means unset,
 // the Phase 4 media service validates the id before this is called).
 // scheduled_for and published_at are left NULL — the publishing phase
-// populates them.
+// populates them. Locale defaults to "en" when blank. TranslationGroup ""
+// means the post is not linked to any translations.
 type NewPost struct {
-	Title          string
-	Slug           string
-	Excerpt        string
-	ContentJSON    string
-	ContentHTML    string
-	ContentText    string
-	CoverImage     string
-	Status         string
-	Author         string
-	Featured       bool
-	SEOTitle       string
-	SEODescription string
-	CanonicalURL   string
-	OGImage        string
+	Title            string
+	Slug             string
+	Excerpt          string
+	ContentJSON      string
+	ContentHTML      string
+	ContentText      string
+	CoverImage       string
+	Status           string
+	Author           string
+	Featured         bool
+	SEOTitle         string
+	SEODescription   string
+	CanonicalURL     string
+	OGImage          string
+	Locale           string
+	TranslationGroup string
 }
 
 // PostUpdate holds the resolved writable fields for UpdatePost, including
@@ -86,20 +91,22 @@ type NewPost struct {
 // touch published_at or scheduled_for, so UpdatePost omits those columns
 // entirely.
 type PostUpdate struct {
-	Title          string
-	Slug           string
-	Excerpt        string
-	ContentJSON    string
-	ContentHTML    string
-	ContentText    string
-	CoverImage     string
-	Status         string
-	Author         string
-	Featured       bool
-	SEOTitle       string
-	SEODescription string
-	CanonicalURL   string
-	OGImage        string
+	Title            string
+	Slug             string
+	Excerpt          string
+	ContentJSON      string
+	ContentHTML      string
+	ContentText      string
+	CoverImage       string
+	Status           string
+	Author           string
+	Featured         bool
+	SEOTitle         string
+	SEODescription   string
+	CanonicalURL     string
+	OGImage          string
+	Locale           string
+	TranslationGroup string
 }
 
 // PostFilter is the set of list filters ListPosts and CountPosts share.
@@ -108,6 +115,7 @@ type PostFilter struct {
 	CategoryID string // "" = any
 	TagID      string // "" = any
 	AuthorID   string // "" = any
+	Locale     string // "" = any
 	Featured   *bool  // nil = any
 	Search     string // "" = any; FTS5 over title, excerpt, content_text
 
@@ -116,6 +124,14 @@ type PostFilter struct {
 	// visibility rule (combined with Status = PostStatusPublished). nil
 	// applies no constraint, so admin listings are unaffected.
 	PublishedBefore *time.Time
+}
+
+// TranslationRef is a sibling post in the same translation_group.
+type TranslationRef struct {
+	ID     string
+	Locale string
+	Slug   string
+	Status string
 }
 
 // PostSortField selects the column ListPosts orders by. The zero value
@@ -135,36 +151,44 @@ func CreatePost(ctx context.Context, db DBTX, in NewPost) (Post, error) {
 		return Post{}, err
 	}
 
+	locale := in.Locale
+	if locale == "" {
+		locale = "en"
+	}
+
 	now := time.Now().UTC()
 	p := Post{
-		ID:             id,
-		Title:          in.Title,
-		Slug:           in.Slug,
-		Excerpt:        in.Excerpt,
-		ContentJSON:    contentJSONOrDefault(in.ContentJSON),
-		ContentHTML:    in.ContentHTML,
-		ContentText:    in.ContentText,
-		CoverImage:     in.CoverImage,
-		Status:         in.Status,
-		Author:         in.Author,
-		Featured:       in.Featured,
-		SEOTitle:       in.SEOTitle,
-		SEODescription: in.SEODescription,
-		CanonicalURL:   in.CanonicalURL,
-		OGImage:        in.OGImage,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:               id,
+		Title:            in.Title,
+		Slug:             in.Slug,
+		Excerpt:          in.Excerpt,
+		ContentJSON:      contentJSONOrDefault(in.ContentJSON),
+		ContentHTML:      in.ContentHTML,
+		ContentText:      in.ContentText,
+		CoverImage:       in.CoverImage,
+		Status:           in.Status,
+		Author:           in.Author,
+		Featured:         in.Featured,
+		SEOTitle:         in.SEOTitle,
+		SEODescription:   in.SEODescription,
+		CanonicalURL:     in.CanonicalURL,
+		OGImage:          in.OGImage,
+		Locale:           locale,
+		TranslationGroup: in.TranslationGroup,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO posts (
 			id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			canonical_url, og_image, locale, translation_group, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.ID, p.Title, p.Slug, nullString(p.Excerpt), p.ContentJSON, p.ContentHTML, p.ContentText,
 		nullString(p.CoverImage), p.Status, p.Author, boolToInt(p.Featured), nullString(p.SEOTitle),
 		nullString(p.SEODescription), nullString(p.CanonicalURL), nullString(p.OGImage),
+		p.Locale, nullString(p.TranslationGroup),
 		formatTime(p.CreatedAt), formatTime(p.UpdatedAt),
 	)
 	if err != nil {
@@ -177,15 +201,20 @@ func CreatePost(ctx context.Context, db DBTX, in NewPost) (Post, error) {
 // updated_at), leaving publishing/media columns untouched. Returns
 // ErrNotFound if no such post exists.
 func UpdatePost(ctx context.Context, db DBTX, id string, in PostUpdate) error {
+	locale := in.Locale
+	if locale == "" {
+		locale = "en"
+	}
 	res, err := db.ExecContext(ctx, `
 		UPDATE posts SET
 			title = ?, slug = ?, excerpt = ?, content_json = ?, content_html = ?, content_text = ?,
 			cover_image = ?, status = ?, author = ?, featured = ?, seo_title = ?, seo_description = ?,
-			canonical_url = ?, og_image = ?, updated_at = ?
+			canonical_url = ?, og_image = ?, locale = ?, translation_group = ?, updated_at = ?
 		WHERE id = ?`,
 		in.Title, in.Slug, nullString(in.Excerpt), contentJSONOrDefault(in.ContentJSON), in.ContentHTML, in.ContentText,
 		nullString(in.CoverImage), in.Status, in.Author, boolToInt(in.Featured), nullString(in.SEOTitle),
 		nullString(in.SEODescription), nullString(in.CanonicalURL), nullString(in.OGImage),
+		locale, nullString(in.TranslationGroup),
 		formatTime(time.Now().UTC()), id,
 	)
 	if err != nil {
@@ -220,7 +249,8 @@ func ListDuePosts(ctx context.Context, db DBTX, now time.Time) ([]Post, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, scheduled_for, published_at, created_at, updated_at
+			canonical_url, og_image, locale, translation_group,
+			scheduled_for, published_at, created_at, updated_at
 		FROM posts
 		WHERE status = ? AND scheduled_for IS NOT NULL AND scheduled_for <= ?
 		ORDER BY scheduled_for ASC, id ASC`,
@@ -262,7 +292,8 @@ func GetPostByID(ctx context.Context, db DBTX, id string) (Post, error) {
 	row := db.QueryRowContext(ctx, `
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, scheduled_for, published_at, created_at, updated_at
+			canonical_url, og_image, locale, translation_group,
+			scheduled_for, published_at, created_at, updated_at
 		FROM posts WHERE id = ?`, id)
 	return scanPost(row)
 }
@@ -275,7 +306,8 @@ func GetPostBySlug(ctx context.Context, db DBTX, slug string) (Post, error) {
 	row := db.QueryRowContext(ctx, `
 		SELECT id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, scheduled_for, published_at, created_at, updated_at
+			canonical_url, og_image, locale, translation_group,
+			scheduled_for, published_at, created_at, updated_at
 		FROM posts WHERE slug = ?`, slug)
 	return scanPost(row)
 }
@@ -375,6 +407,10 @@ func postQueryParts(filter PostFilter) (from, where string, args []any, useFTS b
 		conds = append(conds, "posts.author = ?")
 		args = append(args, filter.AuthorID)
 	}
+	if filter.Locale != "" {
+		conds = append(conds, "posts.locale = ?")
+		args = append(args, filter.Locale)
+	}
 	if filter.Featured != nil {
 		conds = append(conds, "posts.featured = ?")
 		args = append(args, boolToInt(*filter.Featured))
@@ -408,13 +444,15 @@ func postQueryParts(filter PostFilter) (from, where string, args []any, useFTS b
 func postSelectColumns(useFTS bool) string {
 	cols := `id, title, slug, excerpt, content_json, content_html, content_text,
 			cover_image, status, author, featured, seo_title, seo_description,
-			canonical_url, og_image, scheduled_for, published_at, created_at, updated_at`
+			canonical_url, og_image, locale, translation_group,
+			scheduled_for, published_at, created_at, updated_at`
 	if !useFTS {
 		return cols
 	}
 	return `posts.id, posts.title, posts.slug, posts.excerpt, posts.content_json, posts.content_html, posts.content_text,
 			posts.cover_image, posts.status, posts.author, posts.featured, posts.seo_title, posts.seo_description,
-			posts.canonical_url, posts.og_image, posts.scheduled_for, posts.published_at, posts.created_at, posts.updated_at`
+			posts.canonical_url, posts.og_image, posts.locale, posts.translation_group,
+			posts.scheduled_for, posts.published_at, posts.created_at, posts.updated_at`
 }
 
 // sortColumn maps a PostSortField to its ORDER BY column expression. Title
@@ -525,24 +563,26 @@ func GetPostTags(ctx context.Context, db DBTX, postID string) ([]Tag, error) {
 
 func scanPost(row rowScanner) (Post, error) {
 	var (
-		p            Post
-		excerpt      sql.NullString
-		coverImage   sql.NullString
-		featured     int
-		seoTitle     sql.NullString
-		seoDesc      sql.NullString
-		canonicalURL sql.NullString
-		ogImage      sql.NullString
-		scheduledFor sql.NullString
-		publishedAt  sql.NullString
-		createdAt    string
-		updatedAt    string
+		p                Post
+		excerpt          sql.NullString
+		coverImage       sql.NullString
+		featured         int
+		seoTitle         sql.NullString
+		seoDesc          sql.NullString
+		canonicalURL     sql.NullString
+		ogImage          sql.NullString
+		translationGroup sql.NullString
+		scheduledFor     sql.NullString
+		publishedAt      sql.NullString
+		createdAt        string
+		updatedAt        string
 	)
 
 	err := row.Scan(
 		&p.ID, &p.Title, &p.Slug, &excerpt, &p.ContentJSON, &p.ContentHTML, &p.ContentText,
 		&coverImage, &p.Status, &p.Author, &featured, &seoTitle, &seoDesc,
-		&canonicalURL, &ogImage, &scheduledFor, &publishedAt, &createdAt, &updatedAt,
+		&canonicalURL, &ogImage, &p.Locale, &translationGroup,
+		&scheduledFor, &publishedAt, &createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Post{}, ErrNotFound
@@ -558,6 +598,10 @@ func scanPost(row rowScanner) (Post, error) {
 	p.SEODescription = stringOrEmpty(seoDesc)
 	p.CanonicalURL = stringOrEmpty(canonicalURL)
 	p.OGImage = stringOrEmpty(ogImage)
+	p.TranslationGroup = stringOrEmpty(translationGroup)
+	if p.Locale == "" {
+		p.Locale = "en"
+	}
 
 	if p.CreatedAt, err = parseTime(createdAt); err != nil {
 		return Post{}, err
@@ -572,6 +616,77 @@ func scanPost(row rowScanner) (Post, error) {
 		return Post{}, err
 	}
 	return p, nil
+}
+
+// ListTranslationSiblings returns every post in the same translation_group
+// except excludeID, ordered by locale. An empty group returns an empty
+// slice (no error). When publishedOnly is true, only publicly-visible
+// posts (status published, published_at <= now) are returned.
+func ListTranslationSiblings(ctx context.Context, db DBTX, group, excludeID string, publishedOnly bool, now time.Time) ([]TranslationRef, error) {
+	if group == "" {
+		return []TranslationRef{}, nil
+	}
+	query := `
+		SELECT id, locale, slug, status
+		FROM posts
+		WHERE translation_group = ? AND id <> ?`
+	args := []any{group, excludeID}
+	if publishedOnly {
+		query += ` AND status = ? AND published_at IS NOT NULL AND published_at <= ?`
+		args = append(args, PostStatusPublished, formatTime(now))
+	}
+	query += ` ORDER BY locale ASC, id ASC`
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query translation siblings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]TranslationRef, 0)
+	for rows.Next() {
+		var ref TranslationRef
+		if err := rows.Scan(&ref.ID, &ref.Locale, &ref.Slug, &ref.Status); err != nil {
+			return nil, fmt.Errorf("scan translation sibling: %w", err)
+		}
+		out = append(out, ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate translation siblings: %w", err)
+	}
+	return out, nil
+}
+
+// TranslationLocaleTaken reports whether another post in the same
+// translation_group already uses locale. Pass excludeID of the post being
+// updated ("" on create).
+func TranslationLocaleTaken(ctx context.Context, db DBTX, group, locale, excludeID string) (bool, error) {
+	if group == "" {
+		return false, nil
+	}
+	var exists bool
+	err := db.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM posts
+			WHERE translation_group = ? AND locale = ? AND id <> ?
+		)`, group, locale, excludeID,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check translation locale: %w", err)
+	}
+	return exists, nil
+}
+
+// SetPostTranslationGroup assigns a translation_group ("" clears it).
+func SetPostTranslationGroup(ctx context.Context, db DBTX, id, group string) error {
+	res, err := db.ExecContext(ctx, `
+		UPDATE posts SET translation_group = ?, updated_at = ? WHERE id = ?`,
+		nullString(group), formatTime(time.Now().UTC()), id,
+	)
+	if err != nil {
+		return fmt.Errorf("set translation group: %w", err)
+	}
+	return requireRowsAffected(res)
 }
 
 // parseTimePtr converts a nullable stored timestamp to *time.Time (nil when

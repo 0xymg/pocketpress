@@ -54,23 +54,31 @@ type seoDTO struct {
 	OGImageURL   *string `json:"og_image_url"`
 }
 
+// translationDTO is a published sibling in the same translation group.
+type translationDTO struct {
+	Locale string `json:"locale"`
+	Slug   string `json:"slug"`
+}
+
 // postDTO is the frozen public POST shape (development plan section 6).
 // It deliberately never carries status, content_json, content_text,
 // scheduled_for or any other admin-only/internal field.
 type postDTO struct {
-	ID          string         `json:"id"`
-	Title       string         `json:"title"`
-	Slug        string         `json:"slug"`
-	Excerpt     string         `json:"excerpt"`
-	ContentHTML string         `json:"content_html"`
-	CoverImage  *coverImageDTO `json:"cover_image"`
-	Author      authorDTO      `json:"author"`
-	Categories  []termDTO      `json:"categories"`
-	Tags        []termDTO      `json:"tags"`
-	Featured    bool           `json:"featured"`
-	SEO         seoDTO         `json:"seo"`
-	PublishedAt *time.Time     `json:"published_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID           string           `json:"id"`
+	Title        string           `json:"title"`
+	Slug         string           `json:"slug"`
+	Excerpt      string           `json:"excerpt"`
+	ContentHTML  string           `json:"content_html"`
+	CoverImage   *coverImageDTO   `json:"cover_image"`
+	Author       authorDTO        `json:"author"`
+	Categories   []termDTO        `json:"categories"`
+	Tags         []termDTO        `json:"tags"`
+	Featured     bool             `json:"featured"`
+	Locale       string           `json:"locale"`
+	Translations []translationDTO `json:"translations"`
+	SEO          seoDTO           `json:"seo"`
+	PublishedAt  *time.Time       `json:"published_at"`
+	UpdatedAt    time.Time        `json:"updated_at"`
 }
 
 // toPostDTO builds the public post shape from a hydrated content.Post. For a
@@ -78,18 +86,26 @@ type postDTO struct {
 // timestamp; for a draft served through the authorized preview endpoint it is
 // nil and serializes as JSON null. Both the published detail endpoint and the
 // preview endpoint share this serializer, so it tolerates a nil published_at.
+// translations only lists published siblings (draft/scheduled siblings stay
+// out of the public contract).
 func toPostDTO(p content.Post) postDTO {
+	locale := p.Row.Locale
+	if locale == "" {
+		locale = "en"
+	}
 	return postDTO{
-		ID:          p.Row.ID,
-		Title:       p.Row.Title,
-		Slug:        p.Row.Slug,
-		Excerpt:     p.Row.Excerpt,
-		ContentHTML: p.Row.ContentHTML,
-		CoverImage:  toCoverImageDTO(p.CoverImage),
-		Author:      toAuthorDTO(p.Author),
-		Categories:  toTermDTOs(p.Categories),
-		Tags:        toTagTermDTOs(p.Tags),
-		Featured:    p.Row.Featured,
+		ID:           p.Row.ID,
+		Title:        p.Row.Title,
+		Slug:         p.Row.Slug,
+		Excerpt:      p.Row.Excerpt,
+		ContentHTML:  p.Row.ContentHTML,
+		CoverImage:   toCoverImageDTO(p.CoverImage),
+		Author:       toAuthorDTO(p.Author),
+		Categories:   toTermDTOs(p.Categories),
+		Tags:         toTagTermDTOs(p.Tags),
+		Featured:     p.Row.Featured,
+		Locale:       locale,
+		Translations: toPublicTranslations(p.Translations),
 		SEO: seoDTO{
 			Title:        stringOrNil(p.Row.SEOTitle),
 			Description:  stringOrNil(p.Row.SEODescription),
@@ -99,6 +115,17 @@ func toPostDTO(p content.Post) postDTO {
 		PublishedAt: p.Row.PublishedAt,
 		UpdatedAt:   p.Row.UpdatedAt,
 	}
+}
+
+func toPublicTranslations(refs []store.TranslationRef) []translationDTO {
+	out := make([]translationDTO, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Status != store.PostStatusPublished {
+			continue
+		}
+		out = append(out, translationDTO{Locale: ref.Locale, Slug: ref.Slug})
+	}
+	return out
 }
 
 func toAuthorDTO(a content.Author) authorDTO {
