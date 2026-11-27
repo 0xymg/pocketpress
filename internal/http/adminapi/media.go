@@ -200,10 +200,22 @@ func (h *Handler) deleteMedia(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveFile (GET /api/files/{id}/{name...}, public — no auth) streams a
-// stored media file. name is not used for lookup, only id is; see the
-// mediaFileURL doc comment.
+// stored media file, optionally resized/re-encoded via w/h/fit/fm/q query
+// params (see media.ParseTransformQuery). name is not used for lookup, only
+// id is; see the mediaFileURL doc comment.
 func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request) {
-	m, rc, err := h.media.Open(r.Context(), r.PathValue("id"))
+	xform, err := media.ParseTransformQuery(r.URL.Query())
+	if err != nil {
+		var ve *media.ValidationError
+		if errors.As(err, &ve) {
+			h.validationError(w, ve.Fields)
+			return
+		}
+		h.serverError(w, err)
+		return
+	}
+
+	_, out, err := h.media.OpenTransformed(r.Context(), r.PathValue("id"), xform)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) || errors.Is(err, media.ErrNotFound) {
 			middleware.WriteError(w, http.StatusNotFound, "not_found", "File not found.")
@@ -212,14 +224,14 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request) {
 		h.serverError(w, err)
 		return
 	}
-	defer rc.Close()
+	defer out.Body.Close()
 
 	header := w.Header()
-	header.Set("Content-Type", m.Mime)
+	header.Set("Content-Type", out.Mime)
 	header.Set("Cache-Control", "public, max-age=31536000, immutable")
 	header.Set("X-Content-Type-Options", "nosniff")
-	if m.Size > 0 {
-		header.Set("Content-Length", strconv.FormatInt(m.Size, 10))
+	if out.Size > 0 {
+		header.Set("Content-Length", strconv.FormatInt(out.Size, 10))
 	}
 
 	// The net/http server itself suppresses the response body (while still
@@ -227,5 +239,5 @@ func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request) {
 	// method was HEAD, so no separate branch is needed here — and "GET
 	// /api/files/..." already matches HEAD requests to the same path (Go
 	// 1.22+ ServeMux).
-	_, _ = io.Copy(w, rc)
+	_, _ = io.Copy(w, out.Body)
 }

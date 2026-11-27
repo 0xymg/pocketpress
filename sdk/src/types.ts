@@ -27,6 +27,20 @@ export interface CoverImage {
   alt: string;
 }
 
+/** On-demand image transform options for `/api/files/...` URLs. */
+export interface ImageTransformOptions {
+  /** Target width in pixels (1–4096). */
+  w?: number;
+  /** Target height in pixels (1–4096). */
+  h?: number;
+  /** Resize mode. `cover`/`fill` require both `w` and `h`. */
+  fit?: "contain" | "cover" | "fill";
+  /** Output format. `jpg` is accepted by the server as an alias for `jpeg`. */
+  fm?: "jpeg" | "jpg" | "png";
+  /** JPEG quality 1–100 (default 82 on the server). */
+  q?: number;
+}
+
 /** SEO metadata on a post. */
 export interface Seo {
   title: string | null;

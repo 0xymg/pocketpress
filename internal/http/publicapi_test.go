@@ -38,6 +38,7 @@ func newTestEnvWithCORS(t *testing.T, corsOrigins []string) *testEnv {
 		Version:     "test",
 		DB:          st.DB(),
 		MediaDriver: mediaDriver,
+		DataDir:     dataDir,
 		MaxUploadMB: 10,
 		CORSOrigins: corsOrigins,
 		AppSecret:   testAppSecret,

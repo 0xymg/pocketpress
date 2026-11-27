@@ -118,6 +118,7 @@ func newServeCmd() *cobra.Command {
 					DB:             db,
 					SecureCookies:  cfg.IsProduction(),
 					MediaDriver:    mediaDriver,
+					DataDir:        cfg.DataDir,
 					MaxUploadMB:    cfg.MaxUploadMB,
 					CORSOrigins:    cfg.CORSOrigins,
 					AppSecret:      appSecret,

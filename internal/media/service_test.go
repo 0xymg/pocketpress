@@ -117,7 +117,7 @@ func newTestService(t *testing.T) (*media.Service, *store.Store) {
 		t.Fatalf("NewLocalDriver() error = %v", err)
 	}
 
-	svc := media.NewService(st.DB(), driver, 10, slog.New(slog.DiscardHandler))
+	svc := media.NewService(st.DB(), driver, 10, dir, slog.New(slog.DiscardHandler))
 	return svc, st
 }
 
@@ -473,7 +473,7 @@ func TestDeleteRefusesWhenInUse(t *testing.T) {
 // agree with each other.
 func TestMaxUploadBytesAndMBDefaults(t *testing.T) {
 	for _, in := range []int{0, -1, -100} {
-		svc := media.NewService(nil, nil, in, nil)
+		svc := media.NewService(nil, nil, in, "", nil)
 		if svc.MaxUploadMB() != 10 {
 			t.Errorf("NewService(maxUploadMB=%d).MaxUploadMB() = %d, want default 10", in, svc.MaxUploadMB())
 		}
@@ -482,7 +482,7 @@ func TestMaxUploadBytesAndMBDefaults(t *testing.T) {
 		}
 	}
 
-	svc := media.NewService(nil, nil, 25, nil)
+	svc := media.NewService(nil, nil, 25, "", nil)
 	if svc.MaxUploadMB() != 25 || svc.MaxUploadBytes() != 25*(1<<20) {
 		t.Errorf("NewService(maxUploadMB=25) MaxUploadMB/Bytes = %d/%d, want 25/%d",
 			svc.MaxUploadMB(), svc.MaxUploadBytes(), 25*(1<<20))

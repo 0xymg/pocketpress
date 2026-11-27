@@ -220,6 +220,14 @@ describe("PocketPress client", () => {
       "https://cdn.example.com/x.jpg",
     );
     expect(client.resolveUrl(null)).toBeNull();
+    expect(
+      client.transformUrl("/api/files/m1/a.jpg", { w: 800, fm: "jpeg", q: 80 }),
+    ).toBe(
+      "https://cms.example.com/api/files/m1/a.jpg?w=800&fm=jpeg&q=80",
+    );
+    expect(client.transformUrl("/api/files/m1/a.jpg")).toBe(
+      "https://cms.example.com/api/files/m1/a.jpg",
+    );
   });
 
   it("exposes feed URLs and fetches XML bodies", async () => {

@@ -57,7 +57,9 @@ info:
     `cover_image.url` and `seo.og_image_url` are **relative** paths of the
     form `/api/files/{id}/{filename}` — resolve them against the
     PocketPress instance's own origin (e.g. `PP_PUBLIC_URL`), not against
-    the API consumer's own origin.
+    the API consumer's own origin. Optional transform query parameters
+    (`w`, `h`, `fit`, `fm`, `q`) resize or re-encode on demand; see
+    `GET /api/files/{id}/{filename}`.
 servers:
   - url: /
     description: Same-origin (relative to the PocketPress instance's own base URL).
@@ -520,6 +522,133 @@ paths:
         "404":
           $ref: "#/components/responses/ApiDisabled"
 
+  /api/files/{id}/{filename}:
+    get:
+      operationId: getFile
+      summary: Serve a media file (optional transforms)
+      description: >-
+        Streams an uploaded media object by id. The `{filename}` path
+        segment is cosmetic (download-friendly name) and is not used for
+        lookup.
+
+
+        Without transform query parameters the original bytes are returned
+        with the stored Content-Type. With `w`, `h`, and/or `fm`, PocketPress
+        resizes and/or re-encodes on demand (cached under
+        `<PP_DATA_DIR>/transforms/`). Dimensions never upscale beyond the
+        source. Animated GIFs become a single frame when transformed.
+        WebP is accepted as a source format but not as an encode target
+        (`fm=webp` returns 400).
+
+
+        Not gated by `public_api_enabled`. CORS applies (same allowlist as
+        `/api/v1/*`).
+      tags: [Files]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Media id (UUIDv7).
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          description: Cosmetic original filename; ignored for lookup.
+          schema:
+            type: string
+        - name: w
+          in: query
+          required: false
+          description: Target width in pixels (1–4096). Aspect preserved when `h` is omitted (`fit=contain`).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 4096
+        - name: h
+          in: query
+          required: false
+          description: Target height in pixels (1–4096). Aspect preserved when `w` is omitted (`fit=contain`).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 4096
+        - name: fit
+          in: query
+          required: false
+          description: >-
+            Resize mode. `contain` (default) fits inside the box;
+            `cover` fills and crops; `fill` stretches. `cover` and `fill`
+            require both `w` and `h`.
+          schema:
+            type: string
+            enum: [contain, cover, fill]
+            default: contain
+        - name: fm
+          in: query
+          required: false
+          description: >-
+            Output format. When omitted, PNG/GIF sources become PNG and
+            JPEG/WebP sources become JPEG. `jpg` is accepted as an alias
+            for `jpeg`.
+          schema:
+            type: string
+            enum: [jpeg, jpg, png]
+        - name: q
+          in: query
+          required: false
+          description: JPEG quality (1–100). Default 82. Ignored for PNG output.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 82
+      responses:
+        "200":
+          description: Original or transformed image bytes.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=31536000, immutable"
+            Content-Type:
+              schema:
+                type: string
+                description: Stored MIME type, or image/jpeg / image/png after a transform.
+            X-Content-Type-Options:
+              schema:
+                type: string
+                const: nosniff
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid transform query parameter.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          description: Unknown media id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
 components:
   parameters:
     Slug:
@@ -813,3 +942,5 @@ tags:
   - name: Tags
   - name: Feeds
     description: RSS/Atom syndication feeds and Sitemap XML.
+  - name: Files
+    description: Public media file serving and on-demand image transforms.
