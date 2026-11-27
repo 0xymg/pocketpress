@@ -24,11 +24,14 @@ const EDITOR = {
 	created_at: '2024-01-01T00:00:00Z'
 };
 
+const EMPTY_FILTERS = { category_ids: [] as string[], tag_ids: [] as string[] };
+
 const WEBHOOK_A = {
 	id: 'wh-1',
 	name: 'Product website',
 	url: 'https://product.example.com/api/pocketpress-webhook',
 	events: ['post.published', 'post.updated'],
+	filters: EMPTY_FILTERS,
 	active: true,
 	created_at: '2026-08-01T00:00:00Z'
 };
@@ -38,6 +41,7 @@ const WEBHOOK_B = {
 	name: 'Staging',
 	url: 'https://staging.example.com/webhook',
 	events: ['post.deleted'],
+	filters: EMPTY_FILTERS,
 	active: false,
 	created_at: '2026-08-01T00:00:00Z'
 };
@@ -96,6 +100,12 @@ function routedFetch(overrides: {
 		}
 		if (method === 'GET' && url.includes('/webhooks')) {
 			return (overrides.list ?? (() => jsonResponse(200, true, { webhooks: [WEBHOOK_A] })))();
+		}
+		if (method === 'GET' && url.includes('/categories')) {
+			return jsonResponse(200, true, { categories: [] });
+		}
+		if (method === 'GET' && url.includes('/tags')) {
+			return jsonResponse(200, true, { tags: [] });
 		}
 		throw new Error(`Unhandled request in test: ${method} ${url}`);
 	});

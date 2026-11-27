@@ -114,6 +114,103 @@ func TestWebhookCRUDAndSecretOnce(t *testing.T) {
 	}
 }
 
+// TestWebhookFiltersCRUD confirms category/tag filters round-trip on create
+// and patch, reject unknown ids, and default to empty arrays when omitted.
+func TestWebhookFiltersCRUD(t *testing.T) {
+	env := newTestEnv(t, false)
+	env.setup(t)
+
+	resp := env.do(t, http.MethodPost, "/api/admin/v1/categories", map[string]any{
+		"name": "Changelog", "slug": "changelog",
+	})
+	raw, m := readJSON(t, resp)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create category status = %d; body = %s", resp.StatusCode, raw)
+	}
+	catID, _ := m["category"].(map[string]any)["id"].(string)
+
+	resp = env.do(t, http.MethodPost, "/api/admin/v1/tags", map[string]any{
+		"name": "Release", "slug": "release",
+	})
+	raw, m = readJSON(t, resp)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create tag status = %d; body = %s", resp.StatusCode, raw)
+	}
+	tagID, _ := m["tag"].(map[string]any)["id"].(string)
+
+	id, _ := env.createWebhookViaAPI(t, map[string]any{
+		"name":   "Filtered",
+		"url":    "https://example.com/hook",
+		"events": []string{"post.published"},
+		"filters": map[string]any{
+			"category_ids": []string{catID},
+			"tag_ids":      []string{tagID},
+		},
+	})
+
+	resp = env.do(t, http.MethodGet, "/api/admin/v1/webhooks", nil)
+	raw, m = readJSON(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list status = %d; body = %s", resp.StatusCode, raw)
+	}
+	list := m["webhooks"].([]any)
+	wh := list[0].(map[string]any)
+	filters := wh["filters"].(map[string]any)
+	cats := filters["category_ids"].([]any)
+	tags := filters["tag_ids"].([]any)
+	if len(cats) != 1 || cats[0] != catID || len(tags) != 1 || tags[0] != tagID {
+		t.Fatalf("filters = %#v, want category=%s tag=%s", filters, catID, tagID)
+	}
+
+	// Clear filters via PATCH.
+	resp = env.do(t, http.MethodPatch, "/api/admin/v1/webhooks/"+id, map[string]any{
+		"filters": map[string]any{"category_ids": []string{}, "tag_ids": []string{}},
+	})
+	raw, m = readJSON(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("clear filters status = %d; body = %s", resp.StatusCode, raw)
+	}
+	filters = m["webhook"].(map[string]any)["filters"].(map[string]any)
+	if len(filters["category_ids"].([]any)) != 0 || len(filters["tag_ids"].([]any)) != 0 {
+		t.Fatalf("cleared filters = %#v, want empty arrays", filters)
+	}
+
+	// Unknown category id → validation_failed.
+	resp = env.do(t, http.MethodPatch, "/api/admin/v1/webhooks/"+id, map[string]any{
+		"filters": map[string]any{"category_ids": []string{"nope"}, "tag_ids": []string{}},
+	})
+	raw, m = readJSON(t, resp)
+	if resp.StatusCode != http.StatusBadRequest || errorCode(t, m) != "validation_failed" {
+		t.Fatalf("unknown category = %d %s; body = %s", resp.StatusCode, errorCode(t, m), raw)
+	}
+	details := m["error"].(map[string]any)["details"].(map[string]any)
+	if _, ok := details["category_ids"]; !ok {
+		t.Fatalf("details missing category_ids: %v", details)
+	}
+
+	// Omitted filters on create → empty arrays in response.
+	id2, _ := env.createWebhookViaAPI(t, map[string]any{
+		"name": "Unfiltered", "url": "https://example.com/u", "events": []string{"post.updated"},
+	})
+	resp = env.do(t, http.MethodGet, "/api/admin/v1/webhooks", nil)
+	_, m = readJSON(t, resp)
+	foundDefault := false
+	for _, item := range m["webhooks"].([]any) {
+		row := item.(map[string]any)
+		if row["id"] != id2 {
+			continue
+		}
+		foundDefault = true
+		f := row["filters"].(map[string]any)
+		if len(f["category_ids"].([]any)) != 0 || len(f["tag_ids"].([]any)) != 0 {
+			t.Fatalf("default filters = %#v, want empty", f)
+		}
+	}
+	if !foundDefault {
+		t.Fatalf("webhook %s not found in list", id2)
+	}
+}
+
 // TestWebhookCreateValidation covers the field-level 400 envelope for the
 // frozen payload fields name/url/events.
 func TestWebhookCreateValidation(t *testing.T) {

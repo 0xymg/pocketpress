@@ -133,6 +133,9 @@ func (d *Dispatcher) dispatchPost(ctx context.Context, event string, p *content.
 		if !containsEvent(wh.Events, event) {
 			continue
 		}
+		if !MatchesFilters(wh.Filters, p) {
+			continue
+		}
 		if _, err := d.enqueue(ctx, wh, event, data); err != nil {
 			d.logger.Error("webhook dispatch: enqueue failed",
 				slog.String("event", event), slog.String("webhook_id", wh.ID),

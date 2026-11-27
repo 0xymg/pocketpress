@@ -23,12 +23,17 @@
 		ApiError,
 		createWebhook,
 		deleteWebhook,
+		listCategories,
+		listTags,
 		listWebhooks,
 		rotateWebhookSecret,
 		testWebhook,
 		updateWebhook,
+		type Category,
+		type Tag,
 		type Webhook,
-		type WebhookEvent
+		type WebhookEvent,
+		type WebhookFilters
 	} from '$lib/api';
 
 	type LoadState = 'pending' | 'success' | 'error';
@@ -58,7 +63,11 @@
 		}
 	];
 
+	const emptyFilters = (): WebhookFilters => ({ category_ids: [], tag_ids: [] });
+
 	let webhooks = $state<Webhook[]>([]);
+	let categories = $state<Category[]>([]);
+	let tags = $state<Tag[]>([]);
 	let loadState = $state<LoadState>('pending');
 	let loadError = $state('');
 
@@ -66,6 +75,8 @@
 	let newName = $state('');
 	let newUrl = $state('');
 	let newEvents = $state<WebhookEvent[]>([]);
+	let newCategoryIds = $state<string[]>([]);
+	let newTagIds = $state<string[]>([]);
 	let newActive = $state(true);
 	let creating = $state(false);
 	let createError = $state('');
@@ -76,6 +87,8 @@
 	let editName = $state('');
 	let editUrl = $state('');
 	let editEvents = $state<WebhookEvent[]>([]);
+	let editCategoryIds = $state<string[]>([]);
+	let editTagIds = $state<string[]>([]);
 	let editActive = $state(true);
 	let editFieldErrors = $state<Record<string, string>>({});
 
@@ -111,8 +124,14 @@
 	async function loadWebhooks() {
 		loadState = 'pending';
 		try {
-			const { webhooks: fetched } = await listWebhooks();
+			const [{ webhooks: fetched }, cats, tagList] = await Promise.all([
+				listWebhooks(),
+				listCategories(),
+				listTags()
+			]);
 			webhooks = fetched;
+			categories = cats.categories;
+			tags = tagList.tags;
 			loadState = 'success';
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Unable to load webhooks.';
@@ -132,6 +151,26 @@
 		editEvents = checked ? [...editEvents, value] : editEvents.filter((e) => e !== value);
 	}
 
+	function toggleId(list: string[], id: string, checked: boolean): string[] {
+		return checked ? [...list, id] : list.filter((x) => x !== id);
+	}
+
+	function categoryLabel(id: string): string {
+		return categories.find((c) => c.id === id)?.name ?? id;
+	}
+
+	function tagLabel(id: string): string {
+		return tags.find((t) => t.id === id)?.name ?? id;
+	}
+
+	function filtersSummary(filters: WebhookFilters | undefined): string[] {
+		const f = filters ?? emptyFilters();
+		const parts: string[] = [];
+		for (const id of f.category_ids) parts.push(`cat:${categoryLabel(id)}`);
+		for (const id of f.tag_ids) parts.push(`tag:${tagLabel(id)}`);
+		return parts;
+	}
+
 	async function handleCreate(event: SubmitEvent) {
 		event.preventDefault();
 		createError = '';
@@ -142,6 +181,7 @@
 				name: newName,
 				url: newUrl,
 				events: newEvents,
+				filters: { category_ids: newCategoryIds, tag_ids: newTagIds },
 				active: newActive
 			});
 			webhooks = [...webhooks, webhook];
@@ -149,6 +189,8 @@
 			newName = '';
 			newUrl = '';
 			newEvents = [];
+			newCategoryIds = [];
+			newTagIds = [];
 			newActive = true;
 		} catch (err) {
 			if (err instanceof ApiError && err.code === 'validation_failed') {
@@ -165,6 +207,8 @@
 		editName = webhook.name;
 		editUrl = webhook.url;
 		editEvents = [...webhook.events];
+		editCategoryIds = [...(webhook.filters?.category_ids ?? [])];
+		editTagIds = [...(webhook.filters?.tag_ids ?? [])];
 		editActive = webhook.active;
 		editFieldErrors = {};
 		rowError = { ...rowError, [webhook.id]: '' };
@@ -185,6 +229,7 @@
 				name: editName,
 				url: editUrl,
 				events: editEvents,
+				filters: { category_ids: editCategoryIds, tag_ids: editTagIds },
 				active: editActive
 			});
 			webhooks = webhooks.map((w) => (w.id === id ? webhook : w));
@@ -401,6 +446,65 @@
 											{/if}
 										</div>
 
+										<div class="space-y-1.5">
+											<span class="text-sm font-medium text-stone-700">Filters</span>
+											<p class="text-xs text-stone-500">
+												Optional. Leave empty to match every post. Within a list any match
+												fires; category and tag lists both must match when set.
+											</p>
+											{#if categories.length > 0}
+												<span class="block text-xs font-medium text-stone-600">Categories</span>
+												<div class="flex flex-wrap gap-2">
+													{#each categories as cat (cat.id)}
+														<label class="flex items-center gap-1.5 text-sm text-stone-700">
+															<input
+																type="checkbox"
+																checked={editCategoryIds.includes(cat.id)}
+																onchange={(event) =>
+																	(editCategoryIds = toggleId(
+																		editCategoryIds,
+																		cat.id,
+																		event.currentTarget.checked
+																	))}
+															/>
+															{cat.name}
+														</label>
+													{/each}
+												</div>
+											{/if}
+											{#if editFieldErrors.category_ids}
+												<p class="text-xs text-destructive">{editFieldErrors.category_ids}</p>
+											{/if}
+											{#if tags.length > 0}
+												<span class="mt-2 block text-xs font-medium text-stone-600">Tags</span>
+												<div class="flex flex-wrap gap-2">
+													{#each tags as tag (tag.id)}
+														<label class="flex items-center gap-1.5 text-sm text-stone-700">
+															<input
+																type="checkbox"
+																checked={editTagIds.includes(tag.id)}
+																onchange={(event) =>
+																	(editTagIds = toggleId(
+																		editTagIds,
+																		tag.id,
+																		event.currentTarget.checked
+																	))}
+															/>
+															{tag.name}
+														</label>
+													{/each}
+												</div>
+											{/if}
+											{#if editFieldErrors.tag_ids}
+												<p class="text-xs text-destructive">{editFieldErrors.tag_ids}</p>
+											{/if}
+											{#if categories.length === 0 && tags.length === 0}
+												<p class="text-xs text-stone-400">
+													Add categories or tags first to filter by them.
+												</p>
+											{/if}
+										</div>
+
 										<label class="flex items-center gap-2 text-sm text-stone-700">
 											<input type="checkbox" bind:checked={editActive} />
 											Active
@@ -441,6 +545,9 @@
 											<div class="mt-2 flex flex-wrap gap-1.5">
 												{#each webhook.events as evt (evt)}
 													<Badge variant="outline">{evt}</Badge>
+												{/each}
+												{#each filtersSummary(webhook.filters) as part (part)}
+													<Badge variant="secondary">{part}</Badge>
 												{/each}
 											</div>
 										</div>
@@ -605,6 +712,56 @@
 							</div>
 							{#if createFieldErrors.events}
 								<p class="text-xs text-destructive">{createFieldErrors.events}</p>
+							{/if}
+						</div>
+
+						<div class="space-y-1.5">
+							<span class="text-sm font-medium text-stone-700">Filters</span>
+							<p class="text-xs text-stone-500">
+								Optional. Empty means every post. Category and tag lists AND together; ids within a
+								list OR.
+							</p>
+							{#if categories.length > 0}
+								<span class="block text-xs font-medium text-stone-600">Categories</span>
+								<div class="flex flex-wrap gap-2">
+									{#each categories as cat (cat.id)}
+										<label class="flex items-center gap-1.5 text-sm text-stone-700">
+											<input
+												type="checkbox"
+												checked={newCategoryIds.includes(cat.id)}
+												onchange={(event) =>
+													(newCategoryIds = toggleId(
+														newCategoryIds,
+														cat.id,
+														event.currentTarget.checked
+													))}
+											/>
+											{cat.name}
+										</label>
+									{/each}
+								</div>
+							{/if}
+							{#if createFieldErrors.category_ids}
+								<p class="text-xs text-destructive">{createFieldErrors.category_ids}</p>
+							{/if}
+							{#if tags.length > 0}
+								<span class="mt-2 block text-xs font-medium text-stone-600">Tags</span>
+								<div class="flex flex-wrap gap-2">
+									{#each tags as tag (tag.id)}
+										<label class="flex items-center gap-1.5 text-sm text-stone-700">
+											<input
+												type="checkbox"
+												checked={newTagIds.includes(tag.id)}
+												onchange={(event) =>
+													(newTagIds = toggleId(newTagIds, tag.id, event.currentTarget.checked))}
+											/>
+											{tag.name}
+										</label>
+									{/each}
+								</div>
+							{/if}
+							{#if createFieldErrors.tag_ids}
+								<p class="text-xs text-destructive">{createFieldErrors.tag_ids}</p>
 							{/if}
 						</div>
 

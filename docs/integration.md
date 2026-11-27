@@ -201,6 +201,21 @@ export async function handleWebhook(req: {
 
 Configure the webhook URL and secret in the admin UI (**Settings → Webhooks**). PocketPress retries failed deliveries automatically.
 
+### Content filters
+
+Webhooks may include optional `filters` so only matching posts fire deliveries:
+
+```json
+{
+  "filters": {
+    "category_ids": ["cat_…"],
+    "tag_ids": ["tag_…"]
+  }
+}
+```
+
+Empty arrays (or omitted filters) match every post. Non-empty `category_ids` require the post to have at least one listed category; same for `tag_ids`. When both are set, both must match. Send-test deliveries ignore filters.
+
 ## Response shape
 
 Every post includes these fields. See `api/openapi.yaml` for full details:

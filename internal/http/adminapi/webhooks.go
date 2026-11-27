@@ -17,15 +17,22 @@ const (
 	deliveriesMaxPerPage     = 100
 )
 
-// webhookDTO is the frozen WH shape. The signing secret is never included here
-// (it is returned only by create and rotate-secret).
+// webhookFiltersDTO is the additive filters object on a webhook (v0.2).
+type webhookFiltersDTO struct {
+	CategoryIDs []string `json:"category_ids"`
+	TagIDs      []string `json:"tag_ids"`
+}
+
+// webhookDTO is the WH shape. The signing secret is never included here
+// (it is returned only by create and rotate-secret). filters is additive (v0.2).
 type webhookDTO struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	URL       string    `json:"url"`
-	Events    []string  `json:"events"`
-	Active    bool      `json:"active"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	URL       string            `json:"url"`
+	Events    []string          `json:"events"`
+	Filters   webhookFiltersDTO `json:"filters"`
+	Active    bool              `json:"active"`
+	CreatedAt time.Time         `json:"created_at"`
 }
 
 func toWebhookDTO(w store.Webhook) webhookDTO {
@@ -33,11 +40,16 @@ func toWebhookDTO(w store.Webhook) webhookDTO {
 	if events == nil {
 		events = []string{}
 	}
+	f := w.Filters.Normalize()
 	return webhookDTO{
-		ID:        w.ID,
-		Name:      w.Name,
-		URL:       w.URL,
-		Events:    events,
+		ID:     w.ID,
+		Name:   w.Name,
+		URL:    w.URL,
+		Events: events,
+		Filters: webhookFiltersDTO{
+			CategoryIDs: f.CategoryIDs,
+			TagIDs:      f.TagIDs,
+		},
 		Active:    w.Active,
 		CreatedAt: w.CreatedAt,
 	}
@@ -91,10 +103,11 @@ func (h *Handler) listWebhooks(w http.ResponseWriter, r *http.Request) {
 // field is absent.
 func (h *Handler) createWebhook(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name   string   `json:"name"`
-		URL    string   `json:"url"`
-		Events []string `json:"events"`
-		Active *bool    `json:"active"`
+		Name    string                `json:"name"`
+		URL     string                `json:"url"`
+		Events  []string              `json:"events"`
+		Filters *store.WebhookFilters `json:"filters"`
+		Active  *bool                 `json:"active"`
 	}
 	if !h.decode(w, r, &req) {
 		return
@@ -104,12 +117,17 @@ func (h *Handler) createWebhook(w http.ResponseWriter, r *http.Request) {
 	if req.Active != nil {
 		active = *req.Active
 	}
+	filters := store.WebhookFilters{}
+	if req.Filters != nil {
+		filters = *req.Filters
+	}
 
 	wh, secret, err := h.webhook.Create(r.Context(), webhook.CreateInput{
-		Name:   req.Name,
-		URL:    req.URL,
-		Events: req.Events,
-		Active: active,
+		Name:    req.Name,
+		URL:     req.URL,
+		Events:  req.Events,
+		Filters: filters,
+		Active:  active,
 	})
 	if err != nil {
 		h.handleContentError(w, err, "Webhook not found.")
@@ -124,20 +142,22 @@ func (h *Handler) createWebhook(w http.ResponseWriter, r *http.Request) {
 // updateWebhook (PATCH /webhooks/{id}, owner only) applies a partial update.
 func (h *Handler) updateWebhook(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name   *string   `json:"name"`
-		URL    *string   `json:"url"`
-		Events *[]string `json:"events"`
-		Active *bool     `json:"active"`
+		Name    *string               `json:"name"`
+		URL     *string               `json:"url"`
+		Events  *[]string             `json:"events"`
+		Filters *store.WebhookFilters `json:"filters"`
+		Active  *bool                 `json:"active"`
 	}
 	if !h.decode(w, r, &req) {
 		return
 	}
 
 	wh, err := h.webhook.Update(r.Context(), r.PathValue("id"), webhook.UpdatePatch{
-		Name:   req.Name,
-		URL:    req.URL,
-		Events: req.Events,
-		Active: req.Active,
+		Name:    req.Name,
+		URL:     req.URL,
+		Events:  req.Events,
+		Filters: req.Filters,
+		Active:  req.Active,
 	})
 	if err != nil {
 		h.handleContentError(w, err, "Webhook not found.")

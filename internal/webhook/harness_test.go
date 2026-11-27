@@ -35,11 +35,18 @@ func testCipher() *Cipher {
 // only exercise dispatch/enqueue, which never decrypt.
 func insertWebhook(t *testing.T, db *sql.DB, name, url string, events []string, active bool) store.Webhook {
 	t.Helper()
+	return insertWebhookWithFilters(t, db, name, url, events, active, store.WebhookFilters{})
+}
+
+// insertWebhookWithFilters is insertWebhook plus optional category/tag filters.
+func insertWebhookWithFilters(t *testing.T, db *sql.DB, name, url string, events []string, active bool, filters store.WebhookFilters) store.Webhook {
+	t.Helper()
 	wh, err := store.CreateWebhook(context.Background(), db, store.NewWebhook{
 		Name:            name,
 		URL:             url,
 		SecretEncrypted: "ciphertext-placeholder",
 		Events:          events,
+		Filters:         filters,
 		Active:          active,
 	})
 	if err != nil {

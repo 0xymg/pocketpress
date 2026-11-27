@@ -20,7 +20,7 @@ PocketPress is a tiny, self-hosted blog backend for product developers. It gives
 - Import posts from Markdown (YAML frontmatter + Lexical conversion)
 - Import posts from Ghost JSON and WordPress WXR exports
 - Preview tokens for sharing drafts
-- Webhooks for rebuilding your frontend (post.published, post.updated, post.unpublished, post.deleted)
+- Webhooks for rebuilding your frontend (post.published, post.updated, post.unpublished, post.deleted), with optional category/tag filters
 - Backups (database + local files)
 - OpenAPI specification
 
@@ -244,6 +244,10 @@ Extract the timestamp from `X-PocketPress-Timestamp`, concatenate it with a dot 
 - `post.updated` — A published post was edited
 - `post.unpublished` — A post was reverted to draft
 - `post.deleted` — A post was permanently deleted
+
+**Filters (v0.2):**
+
+Each webhook may optionally filter by `category_ids` and/or `tag_ids`. Empty lists match every post. Within a list, any matching id is enough (OR). If both lists are non-empty, the post must match both dimensions (AND). Configure filters in **Settings → Webhooks** or via the admin API `filters` field. Test deliveries ignore filters.
 
 **Retry schedule:**
 
