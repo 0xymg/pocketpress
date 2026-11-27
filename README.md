@@ -16,6 +16,7 @@ PocketPress is a tiny, self-hosted blog backend for product developers. It gives
 - Public REST API at `/api/v1` with pagination, filtering, caching, and ETags
 - RSS 2.0 and Atom 1.0 feeds (`/api/v1/feed.rss`, `/api/v1/feed.atom`)
 - Sitemap XML (`/api/v1/sitemap.xml`)
+- Official JavaScript/TypeScript SDK (`@pocketpress/sdk` in `sdk/`)
 - Preview tokens for sharing drafts
 - Webhooks for rebuilding your frontend (post.published, post.updated, post.unpublished, post.deleted)
 - Backups (database + local files)
@@ -154,6 +155,17 @@ Responses include an `ETag` header. Subsequent requests with `If-None-Match` ret
 
 **Learn more:** See `docs/integration.md` for frontend integration examples (Next.js, Astro, SvelteKit) and the full OpenAPI spec in `api/openapi.yaml`.
 
+## JavaScript / TypeScript SDK
+
+The `@pocketpress/sdk` package wraps the public `/api/v1` API with typed helpers (posts, categories, tags, feeds/sitemap, preview, ETags) plus Node webhook signature verification. See `sdk/README.md`.
+
+```ts
+import { PocketPress } from "@pocketpress/sdk";
+
+const pp = new PocketPress({ baseUrl: "https://cms.example.com" });
+const { data: posts } = await pp.posts.list({ page: 1 });
+```
+
 ## Webhooks
 
 PocketPress can send webhooks when posts are published, updated, unpublished, or deleted.
@@ -218,8 +230,8 @@ S3-hosted files are not copied into backups, but the manifest records that they 
 
 ```bash
 make dev       # Run backend and admin dev servers together
-make test      # Run Go and admin tests
-make lint      # Check gofmt, go vet, and admin lint
+make test      # Run Go, admin, and SDK tests
+make lint      # Check gofmt, go vet, admin lint, and SDK type-check
 make build     # Build the admin SPA and compile the binary
 make clean     # Remove build artifacts
 ```

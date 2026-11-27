@@ -78,3 +78,29 @@ jobs:
 
       - name: Build
         run: npm run build --prefix admin
+
+  sdk:
+    name: SDK (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix sdk
+
+      - name: Type-check
+        run: npm run lint --prefix sdk
+
+      - name: Test
+        run: npm test --prefix sdk
+
+      - name: Build
+        run: npm run build --prefix sdk

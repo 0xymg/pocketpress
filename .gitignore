@@ -13,6 +13,11 @@ pp_data/
 admin/node_modules/
 admin/dist/
 
+# JavaScript/TypeScript SDK
+sdk/node_modules/
+sdk/dist/
+sdk/coverage/
+
 # Environment
 .env
 .env.*

@@ -1,0 +1,50 @@
+{
+  "name": "@pocketpress/sdk",
+  "version": "0.2.0",
+  "description": "TypeScript/JavaScript client for the PocketPress public content API",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xymg/pocketpress.git",
+    "directory": "sdk"
+  },
+  "keywords": [
+    "pocketpress",
+    "cms",
+    "headless",
+    "blog",
+    "content-api"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

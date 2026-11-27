@@ -21,6 +21,7 @@ LDFLAGS     := -X $(VERSION_PKG)=$(VERSION)
 BINARY   := pocketpress
 CMD_PKG  := ./cmd/pocketpress
 ADMIN    := admin
+SDK      := sdk
 
 .DEFAULT_GOAL := help
 
@@ -71,11 +72,16 @@ build: build-admin ## Build the admin SPA and compile the single binary
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(CMD_PKG)
 	@echo "Built ./$(BINARY) (version $(VERSION))"
 
-test: ensure-dist ## Run Go and admin test suites
+test: ensure-dist ## Run Go, admin, and SDK test suites
 	go test ./...
 	npm test --prefix $(ADMIN)
+	@if [ ! -d $(SDK)/node_modules ]; then \
+		echo "$(SDK)/node_modules missing — running npm ci..."; \
+		npm ci --prefix $(SDK); \
+	fi
+	npm test --prefix $(SDK)
 
-lint: ensure-dist ## Check gofmt, go vet and the admin type-check
+lint: ensure-dist ## Check gofmt, go vet, admin type-check, and SDK type-check
 	@echo "Checking gofmt..."
 	@unformatted=$$(gofmt -l .); \
 		if [ -n "$$unformatted" ]; then \
@@ -85,8 +91,14 @@ lint: ensure-dist ## Check gofmt, go vet and the admin type-check
 		fi
 	go vet ./...
 	npm run lint --prefix $(ADMIN)
+	@if [ ! -d $(SDK)/node_modules ]; then \
+		echo "$(SDK)/node_modules missing — running npm ci..."; \
+		npm ci --prefix $(SDK); \
+	fi
+	npm run lint --prefix $(SDK)
 
 clean: ## Remove build artifacts
 	rm -f $(BINARY)
 	rm -rf $(ADMIN)/dist
+	rm -rf $(SDK)/dist
 	rm -rf bin dist
