@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pocketpress/pocketpress/internal/content"
 	"github.com/pocketpress/pocketpress/internal/http/middleware"
 	"github.com/pocketpress/pocketpress/internal/store"
 )
@@ -19,6 +20,7 @@ type settingsDTO struct {
 	SiteURL            string   `json:"site_url"`
 	AdminTitle         string   `json:"admin_title"`
 	Locale             string   `json:"locale"`
+	AvailableLocales   []string `json:"available_locales"`
 	Timezone           string   `json:"timezone"`
 	DefaultAuthor      *string  `json:"default_author"`
 	CORSOrigins        []string `json:"cors_origins"`
@@ -32,11 +34,16 @@ func toSettingsDTO(s store.Settings) settingsDTO {
 	if origins == nil {
 		origins = []string{}
 	}
+	locales := s.AvailableLocales
+	if locales == nil {
+		locales = []string{}
+	}
 	return settingsDTO{
 		SiteName:           s.SiteName,
 		SiteURL:            s.SiteURL,
 		AdminTitle:         s.AdminTitle,
 		Locale:             s.Locale,
+		AvailableLocales:   locales,
 		Timezone:           s.Timezone,
 		DefaultAuthor:      stringPtrOrNil(s.DefaultAuthor),
 		CORSOrigins:        origins,
@@ -50,7 +57,9 @@ func (h *Handler) writeSettings(w http.ResponseWriter, status int, s store.Setti
 	middleware.WriteJSON(w, status, map[string]settingsDTO{"settings": toSettingsDTO(s)})
 }
 
-// getSettings (GET /settings, owner only) returns the singleton settings row.
+// getSettings (GET /settings) returns the singleton settings row. Any
+// authenticated user may read it (editors need available_locales for the
+// post editor); PATCH remains owner-only.
 func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 	s, err := store.GetSettings(r.Context(), h.db)
 	if errors.Is(err, store.ErrNotFound) {
@@ -120,7 +129,30 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 		if locale, bad := decodeString(v); bad {
 			fields["locale"] = "Locale must be a string."
 		} else {
-			s.Locale = strings.TrimSpace(locale)
+			normalized, valid := normalizeSettingsLocale(locale)
+			if !valid {
+				fields["locale"] = "Locale must be a valid language tag (e.g. en, tr, pt-br)."
+			} else {
+				s.Locale = normalized
+				s.AvailableLocales = ensureLocaleListed(s.AvailableLocales, normalized)
+			}
+		}
+	}
+
+	if v, ok := raw["available_locales"]; ok {
+		var locales []string
+		if err := json.Unmarshal(v, &locales); err != nil {
+			fields["available_locales"] = "Available locales must be an array of strings."
+		} else {
+			normalized, ferr := normalizeAvailableLocales(locales)
+			if ferr != "" {
+				fields["available_locales"] = ferr
+			} else {
+				s.AvailableLocales = normalized
+				if s.Locale != "" && !localeListed(normalized, s.Locale) {
+					fields["available_locales"] = "Available locales must include the site default locale."
+				}
+			}
 		}
 	}
 
@@ -254,6 +286,41 @@ func stringPtrOrNil(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func normalizeSettingsLocale(raw string) (string, bool) {
+	return content.NormalizeLocale(raw)
+}
+
+func normalizeAvailableLocales(raw []string) ([]string, string) {
+	if len(raw) == 0 {
+		return nil, "At least one available locale is required."
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		normalized, ok := content.NormalizeLocale(item)
+		if !ok {
+			return nil, "Each available locale must be a valid language tag (e.g. en, tr, pt-br)."
+		}
+		if seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil, "At least one available locale is required."
+	}
+	return out, ""
+}
+
+func localeListed(list []string, locale string) bool {
+	return content.LocaleInList(locale, list)
+}
+
+func ensureLocaleListed(list []string, locale string) []string {
+	return content.EnsureLocaleInList(list, locale)
 }
 
 // invalidCORSOrigin returns the first entry of origins that is not a bare

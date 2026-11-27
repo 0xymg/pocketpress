@@ -39,6 +39,7 @@ const SETTINGS = {
 	site_url: 'https://example.com',
 	admin_title: 'PocketPress Admin',
 	locale: 'en',
+	available_locales: ['en'],
 	timezone: 'UTC',
 	default_author: null,
 	cors_origins: ['https://example.com', 'https://www.example.com'],
@@ -89,7 +90,8 @@ describe('General settings page', () => {
 		expect((screen.getByLabelText('Site URL') as HTMLInputElement).value).toBe(
 			'https://example.com'
 		);
-		expect((screen.getByLabelText('Locale') as HTMLInputElement).value).toBe('en');
+		expect((screen.getByLabelText('Default locale') as HTMLInputElement).value).toBe('en');
+		expect((screen.getByLabelText('Available locales') as HTMLTextAreaElement).value).toBe('en');
 		expect((screen.getByLabelText(/CORS origins/) as HTMLTextAreaElement).value).toBe(
 			'https://example.com\nhttps://www.example.com'
 		);

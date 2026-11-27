@@ -263,6 +263,13 @@ export interface PostMediaRef {
 	height: number;
 }
 
+export interface PostTranslationRef {
+	id: string;
+	locale: string;
+	slug: string;
+	status: PostStatus;
+}
+
 export interface PostSummary {
 	id: string;
 	title: string;
@@ -270,6 +277,7 @@ export interface PostSummary {
 	status: PostStatus;
 	excerpt: string;
 	featured: boolean;
+	locale: string;
 	author: Author;
 	categories: PostTaxonomyRef[];
 	tags: PostTaxonomyRef[];
@@ -289,6 +297,8 @@ export interface PostFull extends PostSummary {
 	seo_title: string;
 	seo_description: string;
 	canonical_url: string;
+	translation_group: string | null;
+	translations: PostTranslationRef[];
 }
 
 export interface PostListMeta {
@@ -308,6 +318,7 @@ export interface PostListParams {
 	per_page?: number;
 	status?: PostStatus;
 	category?: string;
+	locale?: string;
 	search?: string;
 	/** Admin sort allowlist: -updated_at (default) | updated_at | title | -title. */
 	sort?: string;
@@ -335,6 +346,10 @@ export interface PostPayload {
 	cover_image?: string;
 	/** Media id to set as the Open Graph image; "" clears it; omitted leaves it unchanged. */
 	og_image?: string;
+	/** BCP 47 language tag; defaults to the site locale when omitted on create. */
+	locale?: string;
+	/** Post id to join as a translation of; "" unlinks on update. */
+	translate_of?: string;
 }
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
@@ -404,6 +419,7 @@ export function listPosts(params: PostListParams = {}): Promise<PostListResult> 
 		per_page: params.per_page,
 		status: params.status,
 		category: params.category,
+		locale: params.locale,
 		search: params.search,
 		sort: params.sort ?? '-updated_at'
 	});
@@ -570,6 +586,7 @@ export interface Settings {
 	site_url: string;
 	admin_title: string;
 	locale: string;
+	available_locales: string[];
 	timezone: string;
 	default_author: string | null;
 	cors_origins: string[];

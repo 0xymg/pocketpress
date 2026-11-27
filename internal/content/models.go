@@ -13,12 +13,13 @@ import "github.com/pocketpress/pocketpress/internal/store"
 // service's delete guard refuses to remove media still referenced by a
 // post, but a nil embedded object is a safer failure mode here than a 500.
 type Post struct {
-	Row        store.Post
-	Author     Author
-	Categories []store.Category
-	Tags       []store.Tag
-	CoverImage *store.Media
-	OGImage    *store.Media
+	Row          store.Post
+	Author       Author
+	Categories   []store.Category
+	Tags         []store.Tag
+	CoverImage   *store.Media
+	OGImage      *store.Media
+	Translations []store.TranslationRef // siblings in the same translation_group
 }
 
 // CategoryInput is the create body for a category. Slug is a pointer so the
@@ -75,6 +76,8 @@ type PostCreateInput struct {
 	SEODescription string
 	CanonicalURL   string
 	OGImage        string // media id; "" = no OG image
+	Locale         string // blank → site default locale
+	TranslateOf    string // optional post id to join as a translation of
 	CurrentUserID  string
 }
 
@@ -108,7 +111,11 @@ type PostUpdateInput struct {
 	SEODescription *string
 	CanonicalURL   *string
 	OGImage        *string
-	CurrentUserID  string
+	Locale         *string
+	// TranslateOf: nil = leave group unchanged; pointer to "" = unlink;
+	// pointer to a post id = join that post's translation group.
+	TranslateOf   *string
+	CurrentUserID string
 }
 
 // Author is the public user projection exposed by the authors endpoint and

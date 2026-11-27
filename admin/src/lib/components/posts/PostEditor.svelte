@@ -32,6 +32,7 @@
 		deletePost,
 		duplicatePost,
 		getPost,
+		getSettings,
 		listAuthors,
 		listCategories,
 		listTags,
@@ -72,6 +73,7 @@
 	let categories = $state<Category[]>([]);
 	let tags = $state<Tag[]>([]);
 	let authors = $state<Author[]>([]);
+	let availableLocales = $state<string[]>(['en']);
 
 	let saving = $state(false);
 	let saveError = $state('');
@@ -379,6 +381,18 @@
 		} catch {
 			// Reference lists are best-effort — the pickers just render empty
 			// and the user can still save with no categories/tags selected.
+		}
+		try {
+			const { settings } = await getSettings();
+			if (settings.available_locales?.length) {
+				availableLocales = settings.available_locales;
+			}
+			// Seed a new post's locale from the site default without dirtying the form.
+			if (formState.isNew && settings.locale && formState.locale === 'en') {
+				formState.locale = settings.locale;
+			}
+		} catch {
+			// getSettings is owner-only; editors fall back to ['en'].
 		}
 	}
 
@@ -843,6 +857,39 @@
 					</select>
 					{#if fieldErrors.author}
 						<p class="text-xs text-destructive">{fieldErrors.author}</p>
+					{/if}
+				</div>
+
+				<div class="space-y-1.5">
+					<Label for="post-locale">Locale</Label>
+					<select
+						id="post-locale"
+						class="h-10 w-full rounded-[3px] border border-stone-200 bg-white px-3 text-[13px] text-stone-900 outline-none hover:border-stone-300"
+						bind:value={formState.locale}
+						aria-invalid={!!fieldErrors.locale}
+					>
+						{#if !availableLocales.includes(formState.locale) && formState.locale}
+							<option value={formState.locale}>{formState.locale}</option>
+						{/if}
+						{#each availableLocales as loc (loc)}
+							<option value={loc}>{loc}</option>
+						{/each}
+					</select>
+					{#if fieldErrors.locale}
+						<p class="text-xs text-destructive">{fieldErrors.locale}</p>
+					{/if}
+				</div>
+
+				<div class="space-y-1.5">
+					<Label for="post-translate-of">Translation of (post id)</Label>
+					<Input
+						id="post-translate-of"
+						placeholder="Optional — link as translation"
+						bind:value={formState.translateOf}
+						aria-invalid={!!fieldErrors.translate_of}
+					/>
+					{#if fieldErrors.translate_of}
+						<p class="text-xs text-destructive">{fieldErrors.translate_of}</p>
 					{/if}
 				</div>
 

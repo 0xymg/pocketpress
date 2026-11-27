@@ -617,7 +617,7 @@ func TestPublicPostSerializerShape(t *testing.T) {
 
 	wantKeys := []string{
 		"id", "title", "slug", "excerpt", "content_html", "cover_image", "author",
-		"categories", "tags", "featured", "seo", "published_at", "updated_at",
+		"categories", "tags", "featured", "locale", "translations", "seo", "published_at", "updated_at",
 	}
 	for _, k := range wantKeys {
 		if _, ok := data[k]; !ok {

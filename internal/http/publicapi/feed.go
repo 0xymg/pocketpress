@@ -42,15 +42,38 @@ func (h *Handler) writeFeed(w http.ResponseWriter, r *http.Request, atom bool) {
 		return
 	}
 
-	result, err := h.content.ListPublicPosts(r.Context(), content.PublicPostListQuery{
-		Page:     1,
-		PerPage:  feedMaxItems,
-		Sort:     store.PostSortPublishedAt,
-		SortDesc: true,
-	})
-	if err != nil {
-		h.serverError(w, err)
-		return
+	var result content.PostListResult
+	if raw := r.URL.Query().Get("locale"); raw != "" {
+		normalized, ok := content.NormalizeLocale(raw)
+		if !ok {
+			// Malformed locale can never match — emit an empty feed.
+			result = content.PostListResult{Page: 1, PerPage: feedMaxItems}
+		} else {
+			var err error
+			result, err = h.content.ListPublicPosts(r.Context(), content.PublicPostListQuery{
+				Page:     1,
+				PerPage:  feedMaxItems,
+				Locale:   normalized,
+				Sort:     store.PostSortPublishedAt,
+				SortDesc: true,
+			})
+			if err != nil {
+				h.serverError(w, err)
+				return
+			}
+		}
+	} else {
+		var err error
+		result, err = h.content.ListPublicPosts(r.Context(), content.PublicPostListQuery{
+			Page:     1,
+			PerPage:  feedMaxItems,
+			Sort:     store.PostSortPublishedAt,
+			SortDesc: true,
+		})
+		if err != nil {
+			h.serverError(w, err)
+			return
+		}
 	}
 
 	feedURL := absoluteRequestURL(r)

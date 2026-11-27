@@ -35,6 +35,7 @@
 	let siteUrl = $state('');
 	let adminTitle = $state('');
 	let locale = $state('');
+	let availableLocalesText = $state('');
 	let timezone = $state('');
 	let previewUrlTemplate = $state('');
 	let corsOriginsText = $state('');
@@ -51,6 +52,7 @@
 		siteUrl = settings.site_url;
 		adminTitle = settings.admin_title;
 		locale = settings.locale;
+		availableLocalesText = (settings.available_locales ?? []).join('\n');
 		timezone = settings.timezone;
 		previewUrlTemplate = settings.preview_url_template ?? '';
 		corsOriginsText = settings.cors_origins.join('\n');
@@ -93,6 +95,11 @@
 		if (adminTitle !== baseline.admin_title) payload.admin_title = adminTitle;
 		if (locale !== baseline.locale) payload.locale = locale;
 		if (timezone !== baseline.timezone) payload.timezone = timezone;
+
+		const locales = parseCorsOrigins(availableLocalesText);
+		if (!sameOrigins(locales, baseline.available_locales ?? [])) {
+			payload.available_locales = locales;
+		}
 
 		const normalizedTemplate = previewUrlTemplate.trim() === '' ? null : previewUrlTemplate;
 		if (normalizedTemplate !== baseline.preview_url_template) {
@@ -211,7 +218,7 @@
 							</div>
 
 							<div class="space-y-1.5">
-								<Label for="settings-locale">Locale</Label>
+								<Label for="settings-locale">Default locale</Label>
 								<Input
 									id="settings-locale"
 									class="max-w-[10rem]"
@@ -221,6 +228,21 @@
 								/>
 								{#if fieldErrors.locale}
 									<p class="text-xs text-destructive">{fieldErrors.locale}</p>
+								{/if}
+							</div>
+
+							<div class="space-y-1.5">
+								<Label for="settings-available-locales">Available locales</Label>
+								<Textarea
+									id="settings-available-locales"
+									rows={3}
+									placeholder={"en\ntr\nde"}
+									bind:value={availableLocalesText}
+									aria-invalid={!!fieldErrors.available_locales}
+								/>
+								<p class="text-xs text-stone-500">One BCP 47 language tag per line (e.g. en, tr, pt-br).</p>
+								{#if fieldErrors.available_locales}
+									<p class="text-xs text-destructive">{fieldErrors.available_locales}</p>
 								{/if}
 							</div>
 

@@ -23,7 +23,7 @@ func TestUpAppliesInitMigrationAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.Up() error = %v", err)
 	}
-	wantApplied := []string{"0001_init", "0002_media", "0003_fts", "0004_webhook_filters", "0005_author_profiles"}
+	wantApplied := []string{"0001_init", "0002_media", "0003_fts", "0004_webhook_filters", "0005_author_profiles", "0006_localization"}
 	if len(applied) != len(wantApplied) {
 		t.Fatalf("store.Up() applied = %v, want %v", applied, wantApplied)
 	}
@@ -39,6 +39,9 @@ func TestUpAppliesInitMigrationAndIsIdempotent(t *testing.T) {
 	assertColumnExists(t, st, "webhooks", "filters")
 	assertColumnExists(t, st, "users", "slug")
 	assertColumnExists(t, st, "users", "bio")
+	assertColumnExists(t, st, "posts", "locale")
+	assertColumnExists(t, st, "posts", "translation_group")
+	assertColumnExists(t, st, "settings", "available_locales")
 
 	appliedAgain, err := store.Up(ctx, st.DB())
 	if err != nil {
@@ -70,18 +73,30 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertColumnExists(t, st, "webhooks", "filters")
 	assertColumnExists(t, st, "users", "slug")
 
-	// First Down reverts 0005_author_profiles only.
+	// First Down reverts 0006_localization only.
 	reverted, err := store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() error = %v", err)
 	}
+	if reverted != "0006_localization" {
+		t.Fatalf("store.Down() reverted = %q, want %q", reverted, "0006_localization")
+	}
+	assertColumnMissing(t, st, "posts", "locale")
+	assertColumnMissing(t, st, "settings", "available_locales")
+	assertColumnExists(t, st, "users", "slug")
+
+	// Second Down reverts 0005_author_profiles only.
+	reverted, err = store.Down(ctx, st.DB())
+	if err != nil {
+		t.Fatalf("store.Down() (author profiles) error = %v", err)
+	}
 	if reverted != "0005_author_profiles" {
-		t.Fatalf("store.Down() reverted = %q, want %q", reverted, "0005_author_profiles")
+		t.Fatalf("store.Down() (author profiles) reverted = %q, want %q", reverted, "0005_author_profiles")
 	}
 	assertColumnMissing(t, st, "users", "slug")
 	assertColumnExists(t, st, "webhooks", "filters")
 
-	// Second Down reverts 0004_webhook_filters only.
+	// Third Down reverts 0004_webhook_filters only.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (filters) error = %v", err)
@@ -92,7 +107,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertColumnMissing(t, st, "webhooks", "filters")
 	assertTableExists(t, st, "posts_fts")
 
-	// Third Down reverts 0003_fts only.
+	// Fourth Down reverts 0003_fts only.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
 		t.Fatalf("store.Down() (fts) error = %v", err)
@@ -104,7 +119,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertTableExists(t, st, "media")
 	assertTableExists(t, st, "posts")
 
-	// Fourth Down reverts 0002_media only: media goes away, posts (from
+	// Fifth Down reverts 0002_media only: media goes away, posts (from
 	// 0001_init) is untouched.
 	reverted, err = store.Down(ctx, st.DB())
 	if err != nil {
@@ -139,7 +154,7 @@ func TestUpDownUpCycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.Up() (after down) error = %v", err)
 	}
-	wantAgain := []string{"0001_init", "0002_media", "0003_fts", "0004_webhook_filters", "0005_author_profiles"}
+	wantAgain := []string{"0001_init", "0002_media", "0003_fts", "0004_webhook_filters", "0005_author_profiles", "0006_localization"}
 	if len(appliedAgain) != len(wantAgain) {
 		t.Fatalf("store.Up() (after down) applied = %v, want %v", appliedAgain, wantAgain)
 	}
@@ -153,6 +168,8 @@ func TestUpDownUpCycle(t *testing.T) {
 	assertTableExists(t, st, "posts_fts")
 	assertColumnExists(t, st, "webhooks", "filters")
 	assertColumnExists(t, st, "users", "slug")
+	assertColumnExists(t, st, "posts", "locale")
+	assertColumnExists(t, st, "settings", "available_locales")
 }
 
 func assertTableExists(t *testing.T, st *store.Store, name string) {

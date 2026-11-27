@@ -20,4 +20,5 @@ export type {
   Seo,
   Tag,
   Term,
+  Translation,
 } from "./types.js";

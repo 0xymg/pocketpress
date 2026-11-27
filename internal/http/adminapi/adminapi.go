@@ -126,8 +126,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /api/admin/v1/posts/{id}/archive", user(h.archivePost))
 	mux.Handle("POST /api/admin/v1/posts/{id}/preview-token", user(h.previewToken))
 
-	// Settings: owner-only (editors cannot manage system settings).
-	mux.Handle("GET /api/admin/v1/settings", owner(h.getSettings))
+	// Settings: any authenticated user may read (editors need available_locales
+	// for the post editor); only owners may PATCH.
+	mux.Handle("GET /api/admin/v1/settings", requireUser(http.HandlerFunc(h.getSettings)))
 	mux.Handle("PATCH /api/admin/v1/settings", owner(h.updateSettings))
 
 	// Webhooks: owner-only (editors cannot manage webhooks, per the plan's

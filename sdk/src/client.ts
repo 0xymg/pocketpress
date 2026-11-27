@@ -233,6 +233,7 @@ class PostsResource {
       tag: params.tag,
       featured: params.featured,
       author: params.author,
+      locale: params.locale,
       sort: params.sort,
       q: params.q,
     });
@@ -324,6 +325,7 @@ class CategoriesResource {
       tag: params.tag,
       featured: params.featured,
       author: params.author,
+      locale: params.locale,
       sort: params.sort,
       q: params.q,
     });
@@ -363,6 +365,7 @@ class TagsResource {
       category: params.category,
       featured: params.featured,
       author: params.author,
+      locale: params.locale,
       sort: params.sort,
       q: params.q,
     });
@@ -402,6 +405,7 @@ class AuthorsResource {
       category: params.category,
       tag: params.tag,
       featured: params.featured,
+      locale: params.locale,
       sort: params.sort,
       q: params.q,
     });

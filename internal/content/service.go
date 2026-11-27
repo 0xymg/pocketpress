@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/pocketpress/pocketpress/internal/store"
@@ -338,6 +339,7 @@ type PostListQuery struct {
 	PerPage    int
 	Status     string
 	CategoryID string
+	Locale     string
 	Search     string
 	// Sort selects the column to order by. The zero value (PostSortUpdatedAt)
 	// preserves the admin list's long-standing default.
@@ -357,7 +359,7 @@ type PostListResult struct {
 // ListPosts returns one page of posts matching q, hydrated with their
 // author, categories and tags.
 func (s *Service) ListPosts(ctx context.Context, q PostListQuery) (PostListResult, error) {
-	filter := store.PostFilter{Status: q.Status, CategoryID: q.CategoryID, Search: q.Search}
+	filter := store.PostFilter{Status: q.Status, CategoryID: q.CategoryID, Locale: q.Locale, Search: q.Search}
 
 	total, err := store.CountPosts(ctx, s.db, filter)
 	if err != nil {
@@ -455,27 +457,47 @@ func (s *Service) CreatePost(ctx context.Context, in PostCreateInput) (Post, err
 
 	contentJSON, contentHTML, contentText := resolveContent(in.ContentJSON, in.ContentHTML, fields)
 
+	locale, translationGroup, err := s.resolveCreateLocale(ctx, in.Locale, in.TranslateOf, fields)
+	if err != nil {
+		return Post{}, err
+	}
+
 	if err := fields.orNil(); err != nil {
 		return Post{}, err
 	}
 
 	var newID string
 	err = s.inTx(ctx, func(tx *sql.Tx) error {
+		// When linking to a standalone post, assign a fresh group id to both.
+		group := translationGroup
+		if in.TranslateOf != "" && group == "" {
+			groupID, err := store.NewID()
+			if err != nil {
+				return err
+			}
+			group = groupID
+			if err := store.SetPostTranslationGroup(ctx, tx, in.TranslateOf, group); err != nil {
+				return err
+			}
+		}
+
 		p, err := store.CreatePost(ctx, tx, store.NewPost{
-			Title:          title,
-			Slug:           slug,
-			Excerpt:        excerpt,
-			ContentJSON:    contentJSON,
-			ContentHTML:    contentHTML,
-			ContentText:    contentText,
-			CoverImage:     coverImage,
-			Status:         status,
-			Author:         author,
-			Featured:       in.Featured,
-			SEOTitle:       seoTitle,
-			SEODescription: seoDesc,
-			CanonicalURL:   canonicalURL,
-			OGImage:        ogImage,
+			Title:            title,
+			Slug:             slug,
+			Excerpt:          excerpt,
+			ContentJSON:      contentJSON,
+			ContentHTML:      contentHTML,
+			ContentText:      contentText,
+			CoverImage:       coverImage,
+			Status:           status,
+			Author:           author,
+			Featured:         in.Featured,
+			SEOTitle:         seoTitle,
+			SEODescription:   seoDesc,
+			CanonicalURL:     canonicalURL,
+			OGImage:          ogImage,
+			Locale:           locale,
+			TranslationGroup: group,
 		})
 		if err != nil {
 			return err
@@ -614,26 +636,46 @@ func (s *Service) UpdatePost(ctx context.Context, id string, in PostUpdateInput)
 		}
 	}
 
+	locale, translationGroup, err := s.resolveUpdateLocale(ctx, existing, in.Locale, in.TranslateOf, fields)
+	if err != nil {
+		return Post{}, err
+	}
+
 	if err := fields.orNil(); err != nil {
 		return Post{}, err
 	}
 
 	err = s.inTx(ctx, func(tx *sql.Tx) error {
+		group := translationGroup
+		if in.TranslateOf != nil && strings.TrimSpace(*in.TranslateOf) != "" && group == "" {
+			// Link to a standalone target: mint a shared group for both.
+			groupID, err := store.NewID()
+			if err != nil {
+				return err
+			}
+			group = groupID
+			if err := store.SetPostTranslationGroup(ctx, tx, strings.TrimSpace(*in.TranslateOf), group); err != nil {
+				return err
+			}
+		}
+
 		if err := store.UpdatePost(ctx, tx, id, store.PostUpdate{
-			Title:          title,
-			Slug:           slug,
-			Excerpt:        excerpt,
-			ContentJSON:    contentJSON,
-			ContentHTML:    contentHTML,
-			ContentText:    contentText,
-			CoverImage:     coverImage,
-			Status:         status,
-			Author:         author,
-			Featured:       featured,
-			SEOTitle:       seoTitle,
-			SEODescription: seoDesc,
-			CanonicalURL:   canonicalURL,
-			OGImage:        ogImage,
+			Title:            title,
+			Slug:             slug,
+			Excerpt:          excerpt,
+			ContentJSON:      contentJSON,
+			ContentHTML:      contentHTML,
+			ContentText:      contentText,
+			CoverImage:       coverImage,
+			Status:           status,
+			Author:           author,
+			Featured:         featured,
+			SEOTitle:         seoTitle,
+			SEODescription:   seoDesc,
+			CanonicalURL:     canonicalURL,
+			OGImage:          ogImage,
+			Locale:           locale,
+			TranslationGroup: group,
 		}); err != nil {
 			return err
 		}
@@ -732,6 +774,9 @@ func (s *Service) DuplicatePost(ctx context.Context, id, currentUserID string) (
 			SEODescription: src.SEODescription,
 			CanonicalURL:   src.CanonicalURL,
 			OGImage:        src.OGImage,
+			Locale:         src.Locale,
+			// Duplicate stands alone — do not inherit the source translation group.
+			TranslationGroup: "",
 		})
 		if err != nil {
 			return err
@@ -825,6 +870,158 @@ func (s *Service) resolveUpdatedSlug(ctx context.Context, provided *string, exis
 		return existingSlug, nil
 	}
 	return candidate, nil
+}
+
+// resolveCreateLocale picks the locale for a new post (request → site
+// default → "en") and, when TranslateOf is set, the translation group to
+// join. A blank group with a non-empty TranslateOf means the target is
+// currently standalone — the caller must mint a shared group id for both.
+func (s *Service) resolveCreateLocale(ctx context.Context, rawLocale, translateOf string, fields fieldErrors) (locale, group string, err error) {
+	settings, err := store.GetSettings(ctx, s.db)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return "", "", err
+	}
+	defaultLocale := "en"
+	available := []string{"en"}
+	if err == nil {
+		if settings.Locale != "" {
+			defaultLocale = settings.Locale
+		}
+		if len(settings.AvailableLocales) > 0 {
+			available = settings.AvailableLocales
+		}
+	}
+
+	rawLocale = strings.TrimSpace(rawLocale)
+	if rawLocale == "" {
+		locale = defaultLocale
+	} else {
+		normalized, ok := NormalizeLocale(rawLocale)
+		if !ok {
+			fields.set("locale", "Locale must be a valid language tag (e.g. en, tr, pt-br).")
+			return "", "", nil
+		}
+		locale = normalized
+	}
+
+	if !LocaleInList(locale, available) {
+		fields.set("locale", "Locale is not in the site's available locales.")
+		return "", "", nil
+	}
+
+	translateOf = strings.TrimSpace(translateOf)
+	if translateOf == "" {
+		return locale, "", nil
+	}
+
+	target, err := store.GetPostByID(ctx, s.db, translateOf)
+	if errors.Is(err, store.ErrNotFound) {
+		fields.set("translate_of", "Unknown post to translate.")
+		return locale, "", nil
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if target.Locale == locale {
+		fields.set("locale", "A translation in this locale already exists for that post.")
+		return locale, "", nil
+	}
+	group = target.TranslationGroup
+	if group != "" {
+		taken, err := store.TranslationLocaleTaken(ctx, s.db, group, locale, "")
+		if err != nil {
+			return "", "", err
+		}
+		if taken {
+			fields.set("locale", "A translation in this locale already exists for that post.")
+			return locale, "", nil
+		}
+	}
+	return locale, group, nil
+}
+
+// resolveUpdateLocale applies optional locale / translate_of patches on top
+// of an existing post. translateOf nil leaves the group unchanged; pointer
+// to "" unlinks; pointer to an id joins that post's group.
+func (s *Service) resolveUpdateLocale(ctx context.Context, existing store.Post, rawLocale, translateOf *string, fields fieldErrors) (locale, group string, err error) {
+	locale = existing.Locale
+	if locale == "" {
+		locale = "en"
+	}
+	group = existing.TranslationGroup
+
+	if rawLocale != nil {
+		normalized, ok := NormalizeLocale(*rawLocale)
+		if !ok {
+			fields.set("locale", "Locale must be a valid language tag (e.g. en, tr, pt-br).")
+			return locale, group, nil
+		}
+		locale = normalized
+
+		settings, err := store.GetSettings(ctx, s.db)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return "", "", err
+		}
+		available := []string{"en"}
+		if err == nil && len(settings.AvailableLocales) > 0 {
+			available = settings.AvailableLocales
+		}
+		if !LocaleInList(locale, available) {
+			fields.set("locale", "Locale is not in the site's available locales.")
+			return locale, group, nil
+		}
+	}
+
+	if translateOf != nil {
+		targetID := strings.TrimSpace(*translateOf)
+		if targetID == "" {
+			group = ""
+		} else if targetID == existing.ID {
+			fields.set("translate_of", "A post cannot be a translation of itself.")
+			return locale, group, nil
+		} else {
+			target, err := store.GetPostByID(ctx, s.db, targetID)
+			if errors.Is(err, store.ErrNotFound) {
+				fields.set("translate_of", "Unknown post to translate.")
+				return locale, group, nil
+			}
+			if err != nil {
+				return "", "", err
+			}
+			if target.Locale == locale {
+				fields.set("locale", "A translation in this locale already exists for that post.")
+				return locale, group, nil
+			}
+			group = target.TranslationGroup
+			checkGroup := group
+			if checkGroup == "" {
+				// Will mint a shared group in the transaction; uniqueness
+				// only needs checking once a group exists.
+				checkGroup = ""
+			}
+			if checkGroup != "" {
+				taken, err := store.TranslationLocaleTaken(ctx, s.db, checkGroup, locale, existing.ID)
+				if err != nil {
+					return "", "", err
+				}
+				if taken {
+					fields.set("locale", "A translation in this locale already exists for that post.")
+					return locale, group, nil
+				}
+			}
+		}
+	} else if group != "" {
+		taken, err := store.TranslationLocaleTaken(ctx, s.db, group, locale, existing.ID)
+		if err != nil {
+			return "", "", err
+		}
+		if taken {
+			fields.set("locale", "A translation in this locale already exists for that post.")
+			return locale, group, nil
+		}
+	}
+
+	return locale, group, nil
 }
 
 // checkAuthor records an "author" field error if authorID is not an existing
@@ -958,9 +1155,10 @@ func (s *Service) loadPost(ctx context.Context, id string) (Post, error) {
 	return s.hydrate(ctx, row, nil)
 }
 
-// hydrate loads a post's categories, tags, author and cover/OG media.
-// authorCache, when non-nil, memoizes author lookups across a page of
-// posts.
+// hydrate loads a post's categories, tags, author, cover/OG media, and
+// translation siblings. authorCache, when non-nil, memoizes author lookups
+// across a page of posts. Translations include every sibling regardless of
+// status — public serializers filter to published ones.
 func (s *Service) hydrate(ctx context.Context, row store.Post, authorCache map[string]Author) (Post, error) {
 	cats, err := store.GetPostCategories(ctx, s.db, row.ID)
 	if err != nil {
@@ -992,7 +1190,20 @@ func (s *Service) hydrate(ctx context.Context, row store.Post, authorCache map[s
 		return Post{}, err
 	}
 
-	return Post{Row: row, Author: author, Categories: cats, Tags: tags, CoverImage: coverImage, OGImage: ogImage}, nil
+	translations, err := store.ListTranslationSiblings(ctx, s.db, row.TranslationGroup, row.ID, false, time.Time{})
+	if err != nil {
+		return Post{}, err
+	}
+
+	return Post{
+		Row:          row,
+		Author:       author,
+		Categories:   cats,
+		Tags:         tags,
+		CoverImage:   coverImage,
+		OGImage:      ogImage,
+		Translations: translations,
+	}, nil
 }
 
 // lookupMedia resolves a possibly-empty media id to its row. An empty id

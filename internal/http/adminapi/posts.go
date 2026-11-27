@@ -53,6 +53,13 @@ func toMediaRefDTO(m *store.Media) *mediaRefDTO {
 
 // postSummaryDTO is the frozen POST_SUMMARY shape (list rows and the base of
 // the full post).
+type translationRefDTO struct {
+	ID     string `json:"id"`
+	Locale string `json:"locale"`
+	Slug   string `json:"slug"`
+	Status string `json:"status"`
+}
+
 type postSummaryDTO struct {
 	ID           string       `json:"id"`
 	Title        string       `json:"title"`
@@ -60,6 +67,7 @@ type postSummaryDTO struct {
 	Status       string       `json:"status"`
 	Excerpt      string       `json:"excerpt"`
 	Featured     bool         `json:"featured"`
+	Locale       string       `json:"locale"`
 	Author       authorDTO    `json:"author"`
 	Categories   []termRefDTO `json:"categories"`
 	Tags         []termRefDTO `json:"tags"`
@@ -77,14 +85,20 @@ type postSummaryDTO struct {
 // internal and is never serialized.
 type postFullDTO struct {
 	postSummaryDTO
-	ContentJSON    string `json:"content_json"`
-	ContentHTML    string `json:"content_html"`
-	SEOTitle       string `json:"seo_title"`
-	SEODescription string `json:"seo_description"`
-	CanonicalURL   string `json:"canonical_url"`
+	ContentJSON      string              `json:"content_json"`
+	ContentHTML      string              `json:"content_html"`
+	SEOTitle         string              `json:"seo_title"`
+	SEODescription   string              `json:"seo_description"`
+	CanonicalURL     string              `json:"canonical_url"`
+	TranslationGroup *string             `json:"translation_group"`
+	Translations     []translationRefDTO `json:"translations"`
 }
 
 func toPostSummaryDTO(p content.Post) postSummaryDTO {
+	locale := p.Row.Locale
+	if locale == "" {
+		locale = "en"
+	}
 	return postSummaryDTO{
 		ID:           p.Row.ID,
 		Title:        p.Row.Title,
@@ -92,6 +106,7 @@ func toPostSummaryDTO(p content.Post) postSummaryDTO {
 		Status:       p.Row.Status,
 		Excerpt:      p.Row.Excerpt,
 		Featured:     p.Row.Featured,
+		Locale:       locale,
 		Author:       authorDTO{ID: p.Author.ID, Name: p.Author.Name, Slug: p.Author.Slug},
 		Categories:   categoryRefs(p.Categories),
 		Tags:         tagRefs(p.Tags),
@@ -105,13 +120,21 @@ func toPostSummaryDTO(p content.Post) postSummaryDTO {
 }
 
 func toPostFullDTO(p content.Post) postFullDTO {
+	translations := make([]translationRefDTO, 0, len(p.Translations))
+	for _, ref := range p.Translations {
+		translations = append(translations, translationRefDTO{
+			ID: ref.ID, Locale: ref.Locale, Slug: ref.Slug, Status: ref.Status,
+		})
+	}
 	return postFullDTO{
-		postSummaryDTO: toPostSummaryDTO(p),
-		ContentJSON:    p.Row.ContentJSON,
-		ContentHTML:    p.Row.ContentHTML,
-		SEOTitle:       p.Row.SEOTitle,
-		SEODescription: p.Row.SEODescription,
-		CanonicalURL:   p.Row.CanonicalURL,
+		postSummaryDTO:   toPostSummaryDTO(p),
+		ContentJSON:      p.Row.ContentJSON,
+		ContentHTML:      p.Row.ContentHTML,
+		SEOTitle:         p.Row.SEOTitle,
+		SEODescription:   p.Row.SEODescription,
+		CanonicalURL:     p.Row.CanonicalURL,
+		TranslationGroup: stringPtrOrNil(p.Row.TranslationGroup),
+		Translations:     translations,
 	}
 }
 
@@ -151,11 +174,28 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 	// title | -title. Unknown values fall back to the default (-updated_at).
 	sortField, sortDesc := parsePostSort(q.Get("sort"))
 
+	localeFilter := ""
+	if raw := q.Get("locale"); raw != "" {
+		if normalized, ok := content.NormalizeLocale(raw); ok {
+			localeFilter = normalized
+		} else {
+			// Malformed locale → empty page.
+			middleware.WriteJSON(w, http.StatusOK, map[string]any{
+				"posts": []postSummaryDTO{},
+				"meta": map[string]int{
+					"page": page, "per_page": perPage, "total_items": 0, "total_pages": 0,
+				},
+			})
+			return
+		}
+	}
+
 	result, err := h.content.ListPosts(r.Context(), content.PostListQuery{
 		Page:       page,
 		PerPage:    perPage,
 		Status:     q.Get("status"),
 		CategoryID: q.Get("category"),
+		Locale:     localeFilter,
 		Search:     q.Get("search"),
 		Sort:       sortField,
 		SortDesc:   sortDesc,
@@ -216,6 +256,8 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 		SEODescription string   `json:"seo_description"`
 		CanonicalURL   string   `json:"canonical_url"`
 		OGImage        string   `json:"og_image"`
+		Locale         string   `json:"locale"`
+		TranslateOf    string   `json:"translate_of"`
 	}
 	if !h.decodePost(w, r, &req) {
 		return
@@ -238,6 +280,8 @@ func (h *Handler) createPost(w http.ResponseWriter, r *http.Request) {
 		SEODescription: req.SEODescription,
 		CanonicalURL:   req.CanonicalURL,
 		OGImage:        req.OGImage,
+		Locale:         req.Locale,
+		TranslateOf:    req.TranslateOf,
 		CurrentUserID:  user.ID,
 	})
 	if err != nil {
@@ -276,6 +320,8 @@ func (h *Handler) updatePost(w http.ResponseWriter, r *http.Request) {
 		SEODescription *string   `json:"seo_description"`
 		CanonicalURL   *string   `json:"canonical_url"`
 		OGImage        *string   `json:"og_image"`
+		Locale         *string   `json:"locale"`
+		TranslateOf    *string   `json:"translate_of"`
 	}
 	if !h.decodePost(w, r, &req) {
 		return
@@ -298,6 +344,8 @@ func (h *Handler) updatePost(w http.ResponseWriter, r *http.Request) {
 		SEODescription: req.SEODescription,
 		CanonicalURL:   req.CanonicalURL,
 		OGImage:        req.OGImage,
+		Locale:         req.Locale,
+		TranslateOf:    req.TranslateOf,
 		CurrentUserID:  user.ID,
 	})
 	if err != nil {

@@ -10,6 +10,7 @@ function fakePost(overrides: Partial<PostFull> = {}): PostFull {
 		status: 'draft',
 		excerpt: 'An excerpt',
 		featured: false,
+		locale: 'en',
 		author: { id: 'author-1', name: 'Ada Lovelace', slug: 'ada-lovelace' },
 		categories: [{ id: 'cat-1', name: 'News', slug: 'news' }],
 		tags: [{ id: 'tag-1', name: 'Launch', slug: 'launch' }],
@@ -24,6 +25,8 @@ function fakePost(overrides: Partial<PostFull> = {}): PostFull {
 		seo_title: '',
 		seo_description: '',
 		canonical_url: '',
+		translation_group: null,
+		translations: [],
 		...overrides
 	};
 }
@@ -152,6 +155,7 @@ describe('PostEditorState — payload building', () => {
 			categories: ['cat-1'],
 			tags: ['tag-1'],
 			featured: true,
+			locale: 'en',
 			seo_title: '',
 			seo_description: '',
 			canonical_url: '',

@@ -53,11 +53,17 @@ func (h *Handler) sitemap(w http.ResponseWriter, r *http.Request) {
 // visible post is collected, or sitemapMaxURLs post entries would be
 // exceeded (leaving room for an optional homepage entry).
 func (h *Handler) listAllPublicPosts(r *http.Request) ([]content.Post, error) {
+	localeFilter, localeOK := parseLocaleFilter(r.URL.Query().Get("locale"))
+	if !localeOK {
+		return nil, nil
+	}
+
 	var all []content.Post
 	for page := 1; ; page++ {
 		result, err := h.content.ListPublicPosts(r.Context(), content.PublicPostListQuery{
 			Page:     page,
 			PerPage:  sitemapPageSize,
+			Locale:   localeFilter,
 			Sort:     store.PostSortPublishedAt,
 			SortDesc: true,
 		})

@@ -26,6 +26,8 @@ const samplePost: Post = {
   categories: [{ id: "c1", name: "News", slug: "news" }],
   tags: [{ id: "t1", name: "Go", slug: "go" }],
   featured: true,
+  locale: "en",
+  translations: [],
   seo: {
     title: null,
     description: null,

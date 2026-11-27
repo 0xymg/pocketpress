@@ -58,6 +58,12 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	localeFilter, localeOK := parseLocaleFilter(q.Get("locale"))
+	if !localeOK {
+		h.writePostList(w, r, nil, parsePage(q), parsePerPage(q), 0)
+		return
+	}
+
 	query := content.PublicPostListQuery{
 		Page:       parsePage(q),
 		PerPage:    parsePerPage(q),
@@ -65,6 +71,7 @@ func (h *Handler) listPosts(w http.ResponseWriter, r *http.Request) {
 		TagID:      tagID,
 		Featured:   parseFeatured(q.Get("featured")),
 		AuthorID:   authorID,
+		Locale:     localeFilter,
 		Search:     q.Get("q"),
 	}
 	query.Sort, query.SortDesc = parseSort(q.Get("sort"))
@@ -190,6 +197,20 @@ func parsePositiveInt(s string, def int) int {
 		return def
 	}
 	return n
+}
+
+// parseLocaleFilter normalizes an optional locale query param. Empty means
+// no filter (ok=true, locale=""). A malformed tag means no post can match
+// (ok=false).
+func parseLocaleFilter(raw string) (locale string, ok bool) {
+	if raw == "" {
+		return "", true
+	}
+	normalized, valid := content.NormalizeLocale(raw)
+	if !valid {
+		return "", false
+	}
+	return normalized, true
 }
 
 // parseFeatured parses the "featured" query parameter ("true"/"false").
