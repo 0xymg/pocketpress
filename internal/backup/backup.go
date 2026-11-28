@@ -1,13 +1,15 @@
 // Package backup implements PocketPress's backup/restore subsystem: it
 // builds a zip archive containing a safe live copy of the SQLite database, a
 // snapshot of the locally-stored uploads, and a JSON manifest describing the
-// backup, and it can list and restore those archives.
+// backup, and it can list, prune and restore those archives.
 //
 // Nothing in this package talks HTTP or imports internal/http; it is called
 // directly by the cmd/pocketpress backup subcommands (see
-// cmd/pocketpress/backup.go). S3-backed uploads are intentionally not
-// copied into the archive (development plan §12) — the manifest simply
-// records which storage driver was configured when the backup was taken.
+// cmd/pocketpress/backup.go) and by the automatic backup Scheduler started
+// from app.Serve when PP_BACKUP_AUTO is enabled. S3-backed uploads are
+// intentionally not copied into the archive (development plan §12) — the
+// manifest simply records which storage driver was configured when the
+// backup was taken.
 package backup
 
 import "github.com/pocketpress/pocketpress/internal/store"

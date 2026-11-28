@@ -24,6 +24,7 @@ func newBackupCmd() *cobra.Command {
 	root.AddCommand(newBackupCreateCmd())
 	root.AddCommand(newBackupListCmd())
 	root.AddCommand(newBackupRestoreCmd())
+	root.AddCommand(newBackupPruneCmd())
 
 	return root
 }
@@ -126,6 +127,43 @@ func newBackupRestoreCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite an existing database, preserving the current one under pre-restore-<timestamp>/")
+	return cmd
+}
+
+// newBackupPruneCmd builds the `backup prune` subcommand: it deletes older
+// archives under <PP_DATA_DIR>/backups so at most --keep newest remain
+// (defaulting to PP_BACKUP_KEEP).
+func newBackupPruneCmd() *cobra.Command {
+	var keep int
+
+	cmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Delete older backup archives, keeping the newest N",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg := app.Load()
+			if keep == 0 {
+				keep = cfg.BackupKeep
+			}
+
+			result, err := backup.Prune(cfg.DataDir, keep)
+			if err != nil {
+				return err
+			}
+
+			if result.Removed == 0 {
+				cmd.Printf("Nothing to prune (%d archive(s), keep=%d).\n", result.Kept, keep)
+				return nil
+			}
+			cmd.Printf("Pruned %d archive(s); %d kept.\n", result.Removed, result.Kept)
+			for _, path := range result.RemovedPaths {
+				cmd.Printf("  removed: %s\n", path)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().IntVar(&keep, "keep", 0, "Number of newest archives to keep (default: PP_BACKUP_KEEP)")
 	return cmd
 }
 

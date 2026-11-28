@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pocketpress/pocketpress/internal/backup"
 	"github.com/pocketpress/pocketpress/internal/content"
 	"github.com/pocketpress/pocketpress/internal/store"
 )
@@ -178,6 +179,27 @@ func Serve(ctx context.Context, cfg Config, logger *slog.Logger, build func(db *
 	if comps.Worker != nil {
 		stopWorker := runBackground(ctx, comps.Worker.Run)
 		defer stopWorker()
+	}
+
+	// Start the automatic backup scheduler when enabled: it creates a backup
+	// archive under <PP_DATA_DIR>/backups when the newest one is older than
+	// the configured interval (including once at startup if none exist), then
+	// prunes down to BackupKeep. Disabled by PP_BACKUP_AUTO=false.
+	if cfg.BackupAuto {
+		stopBackup := runBackground(ctx, func(runCtx context.Context) {
+			backup.NewScheduler(backup.SchedulerOptions{
+				DataDir:       cfg.DataDir,
+				Version:       Version,
+				StorageDriver: cfg.StorageDriver,
+				Interval:      cfg.BackupInterval,
+				Keep:          cfg.BackupKeep,
+			}, logger).Run(runCtx)
+		})
+		defer stopBackup()
+		logger.Info("automatic backups enabled",
+			slog.Duration("interval", cfg.BackupInterval),
+			slog.Int("keep", cfg.BackupKeep),
+		)
 	}
 
 	srv := &http.Server{
