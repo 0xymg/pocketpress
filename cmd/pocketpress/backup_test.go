@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -88,5 +89,43 @@ func TestBackupRestoreCLI(t *testing.T) {
 	}
 	if !strings.Contains(restoreOut, "stopped before restoring") {
 		t.Errorf("restore stdout = %q, want the server-restart reminder", restoreOut)
+	}
+}
+
+// TestBackupPruneCLI creates three archives then prunes down to one via
+// `backup prune --keep=1`, confirming the CLI reports removals and list
+// afterwards shows a single archive.
+func TestBackupPruneCLI(t *testing.T) {
+	dataDir := t.TempDir()
+	migrateFreshStore(t, dataDir)
+
+	for i := 0; i < 3; i++ {
+		out := filepath.Join(dataDir, "backups", fmt.Sprintf("archive-%d.zip", i))
+		if _, _, err := runCLI(t, dataDir, []string{"backup", "create", "--out=" + out}, nil); err != nil {
+			t.Fatalf("backup create #%d error = %v", i, err)
+		}
+	}
+
+	pruneOut, _, err := runCLI(t, dataDir, []string{"backup", "prune", "--keep=1"}, nil)
+	if err != nil {
+		t.Fatalf("backup prune error = %v", err)
+	}
+	if !strings.Contains(pruneOut, "Pruned 2") {
+		t.Errorf("prune stdout = %q, want it to report 2 removals", pruneOut)
+	}
+
+	listOut, _, err := runCLI(t, dataDir, []string{"backup", "list"}, nil)
+	if err != nil {
+		t.Fatalf("backup list error = %v", err)
+	}
+	// One data row plus the NAME header.
+	lines := 0
+	for _, line := range strings.Split(strings.TrimSpace(listOut), "\n") {
+		if strings.Contains(line, ".zip") {
+			lines++
+		}
+	}
+	if lines != 1 {
+		t.Fatalf("backup list after prune shows %d archives, want 1:\n%s", lines, listOut)
 	}
 }

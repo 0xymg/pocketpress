@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds PocketPress runtime configuration loaded from environment
@@ -81,6 +82,25 @@ type Config struct {
 	// (the default) means X-Forwarded-For is never trusted and the direct peer
 	// address is always used — the safe default for a directly-exposed instance.
 	TrustedProxies []string
+
+	// BackupAuto enables the in-process automatic backup scheduler while
+	// `serve` is running (PP_BACKUP_AUTO). When true, PocketPress creates a
+	// backup archive under <PP_DATA_DIR>/backups on the configured interval
+	// and prunes older archives down to BackupKeep. Manual `backup create` /
+	// `list` / `restore` CLI commands always work regardless of this flag.
+	BackupAuto bool
+
+	// BackupInterval is how often the automatic backup scheduler considers
+	// creating a new archive (PP_BACKUP_INTERVAL, Go duration string such as
+	// "24h" or "1h"). A backup is only created when the newest archive is
+	// older than this interval (or none exist), so frequent restarts do not
+	// flood the backups directory.
+	BackupInterval time.Duration
+
+	// BackupKeep is how many newest backup archives the automatic scheduler
+	// (and `backup prune`) retain under <PP_DATA_DIR>/backups
+	// (PP_BACKUP_KEEP). Older *.zip archives in that directory are deleted.
+	BackupKeep int
 }
 
 // prodSecretMinLen is the minimum length required for PP_APP_SECRET and
@@ -105,14 +125,25 @@ const (
 	envPPS3ForcePathStyle = "PP_S3_FORCE_PATH_STYLE"
 	envPPCORSOrigins      = "PP_CORS_ORIGINS"
 	envPPTrustedProxies   = "PP_TRUSTED_PROXIES"
+	envPPBackupAuto       = "PP_BACKUP_AUTO"
+	envPPBackupInterval   = "PP_BACKUP_INTERVAL"
+	envPPBackupKeep       = "PP_BACKUP_KEEP"
 
-	defaultEnv           = "development"
-	defaultHTTPAddr      = "0.0.0.0:8090"
-	defaultDataDir       = "./pp_data"
-	defaultLogLevel      = "info"
-	defaultMaxUploadMB   = 10
-	defaultStorageDriver = "local"
-	defaultS3ForcePath   = false
+	defaultEnv            = "development"
+	defaultHTTPAddr       = "0.0.0.0:8090"
+	defaultDataDir        = "./pp_data"
+	defaultLogLevel       = "info"
+	defaultMaxUploadMB    = 10
+	defaultStorageDriver  = "local"
+	defaultS3ForcePath    = false
+	defaultBackupAuto     = true
+	defaultBackupInterval = 24 * time.Hour
+	defaultBackupKeep     = 7
+
+	// minBackupInterval is the shortest PP_BACKUP_INTERVAL Validate accepts
+	// when automatic backups are enabled — short enough for tests, long
+	// enough to avoid a runaway create loop from a mis-set "1s".
+	minBackupInterval = time.Minute
 
 	// storageDriverLocal and storageDriverS3 are the only valid
 	// StorageDriver values; Validate rejects anything else.
@@ -143,6 +174,9 @@ func LoadConfig(getenv func(string) string) Config {
 		S3ForcePathStyle: boolOrDefault(getenv(envPPS3ForcePathStyle), defaultS3ForcePath),
 		CORSOrigins:      parseCORSOrigins(getenv(envPPCORSOrigins)),
 		TrustedProxies:   parseCommaList(getenv(envPPTrustedProxies)),
+		BackupAuto:       boolOrDefault(getenv(envPPBackupAuto), defaultBackupAuto),
+		BackupInterval:   durationOrDefault(getenv(envPPBackupInterval), defaultBackupInterval),
+		BackupKeep:       intOrDefault(getenv(envPPBackupKeep), defaultBackupKeep),
 	}
 }
 
@@ -172,6 +206,8 @@ func (c Config) IsProduction() bool {
 //     the development plan §10/§11). Non-production keeps the warn-and-continue
 //     behavior implemented in the serve command, which generates ephemeral
 //     secrets instead.
+//   - When PP_BACKUP_AUTO is enabled, PP_BACKUP_INTERVAL must be at least
+//     one minute and PP_BACKUP_KEEP must be at least 1.
 func (c Config) Validate() error {
 	if err := c.validateStorage(); err != nil {
 		return err
@@ -179,10 +215,29 @@ func (c Config) Validate() error {
 	if err := c.validatePublicURL(); err != nil {
 		return err
 	}
+	if err := c.validateBackup(); err != nil {
+		return err
+	}
 	if c.IsProduction() {
 		if err := c.validateProductionSecrets(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// validateBackup enforces automatic-backup settings when BackupAuto is on.
+// Disabled auto-backup skips the checks so operators can leave interval/keep
+// at whatever values they like while the scheduler is off.
+func (c Config) validateBackup() error {
+	if !c.BackupAuto {
+		return nil
+	}
+	if c.BackupInterval < minBackupInterval {
+		return fmt.Errorf("%s must be at least %s when %s is enabled, got %s", envPPBackupInterval, minBackupInterval, envPPBackupAuto, c.BackupInterval)
+	}
+	if c.BackupKeep < 1 {
+		return fmt.Errorf("%s must be at least 1 when %s is enabled, got %d", envPPBackupKeep, envPPBackupAuto, c.BackupKeep)
 	}
 	return nil
 }
@@ -294,6 +349,19 @@ func boolOrDefault(value string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+// durationOrDefault parses value as a Go duration (e.g. "24h", "90m"),
+// falling back to fallback when value is empty, unparseable or not positive.
+func durationOrDefault(value string, fallback time.Duration) time.Duration {
+	if value == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
 }
 
 // parseCORSOrigins splits a PP_CORS_ORIGINS value on commas, trimming

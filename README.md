@@ -74,6 +74,9 @@ All configuration is via environment variables (prefix `PP_`). CLI flags take pr
 | `PP_S3_FORCE_PATH_STYLE` | `false` | Use path-style S3 addressing (required for MinIO) |
 | `PP_CORS_ORIGINS` | (empty) | CORS allowlist (comma-separated) |
 | `PP_TRUSTED_PROXIES` | (empty) | Reverse proxy IPs to trust for X-Forwarded-For (comma-separated) |
+| `PP_BACKUP_AUTO` | `true` | Run automatic backups while `serve` is running |
+| `PP_BACKUP_INTERVAL` | `24h` | Minimum age of the newest backup before creating another (Go duration) |
+| `PP_BACKUP_KEEP` | `7` | How many newest backup archives to retain under `<PP_DATA_DIR>/backups` |
 
 **Production requirement:** When `PP_ENV=production`, both `PP_APP_SECRET` and `PP_ENCRYPTION_KEY` must be set to at least 32 characters, or the server refuses to start.
 
@@ -87,6 +90,7 @@ pocketpress migrate down       # Rollback the latest migration
 pocketpress backup create      # Create a backup (database + local files)
 pocketpress backup list        # List available backups
 pocketpress backup restore     # Restore from a backup file
+pocketpress backup prune       # Delete older backups (keeps newest N)
 pocketpress user create        # Create or update a user (interactive)
 pocketpress user reset-password # Reset a user's password (interactive)
 ```
@@ -273,16 +277,20 @@ After five failed attempts, the delivery is marked failed. Manual retry is avail
 pocketpress backup create
 ```
 
-Creates a `.tar.gz` snapshot containing:
+Creates a `.zip` archive containing:
 
-- The SQLite database
+- The SQLite database (consistent live copy via `VACUUM INTO`)
 - All local uploaded files
-- A manifest with PocketPress version and timestamp
+- A manifest with PocketPress version, timestamp, and storage driver
+
+While `pocketpress serve` is running, automatic backups run by default (`PP_BACKUP_AUTO=true`): a new archive is written under `<PP_DATA_DIR>/backups` when the newest one is older than `PP_BACKUP_INTERVAL` (default `24h`), then older archives are pruned down to `PP_BACKUP_KEEP` (default `7`). Set `PP_BACKUP_AUTO=false` to disable. Manual `backup create` / `list` / `restore` / `prune` always work regardless.
 
 **Important:** Stop the server before restoring a backup:
 
 ```bash
-pocketpress backup restore ~/pocketpress_backup_2026-08-02.tar.gz
+pocketpress backup restore ~/backups/pocketpress-backup-20261128-120000.zip
+# or, when the data directory already has a database:
+pocketpress backup restore --force ~/backups/pocketpress-backup-20261128-120000.zip
 ```
 
 S3-hosted files are not copied into backups, but the manifest records that they are external.

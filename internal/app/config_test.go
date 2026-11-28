@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // strongSecret is a 40-character value that clears the 32-char production
@@ -141,6 +142,9 @@ func TestLoadConfigDefaults(t *testing.T) {
 		StorageDriver:    "local",
 		S3ForcePathStyle: false,
 		CORSOrigins:      nil,
+		BackupAuto:       true,
+		BackupInterval:   24 * time.Hour,
+		BackupKeep:       7,
 	}
 
 	if !reflect.DeepEqual(cfg, want) {
@@ -170,6 +174,9 @@ func TestLoadConfigOverrides(t *testing.T) {
 		"PP_CORS_ORIGINS":        "https://example.com, https://www.example.com ,,https://other.example.com",
 		"PP_APP_SECRET":          "super-secret-app-key",
 		"PP_ENCRYPTION_KEY":      "super-secret-encryption-key",
+		"PP_BACKUP_AUTO":         "false",
+		"PP_BACKUP_INTERVAL":     "12h",
+		"PP_BACKUP_KEEP":         "3",
 	})
 
 	cfg := LoadConfig(env)
@@ -191,6 +198,9 @@ func TestLoadConfigOverrides(t *testing.T) {
 		S3SecretKey:      "supersecret",
 		S3ForcePathStyle: true,
 		CORSOrigins:      []string{"https://example.com", "https://www.example.com", "https://other.example.com"},
+		BackupAuto:       false,
+		BackupInterval:   12 * time.Hour,
+		BackupKeep:       3,
 	}
 
 	if !reflect.DeepEqual(cfg, want) {
@@ -335,6 +345,82 @@ func TestConfigValidateS3RequiresConnectionSettings(t *testing.T) {
 		cfg.S3ForcePathStyle = false
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("Validate() without region/force-path-style = %v, want nil", err)
+		}
+	})
+}
+
+// TestLoadConfigBackupDefaultsAndFallbacks covers PP_BACKUP_* loading:
+// defaults when unset, overrides when set, and fallbacks for bad values.
+func TestLoadConfigBackupDefaultsAndFallbacks(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		cfg := LoadConfig(fakeEnv(nil))
+		if !cfg.BackupAuto {
+			t.Fatal("BackupAuto default = false, want true")
+		}
+		if cfg.BackupInterval != 24*time.Hour {
+			t.Fatalf("BackupInterval = %s, want 24h", cfg.BackupInterval)
+		}
+		if cfg.BackupKeep != 7 {
+			t.Fatalf("BackupKeep = %d, want 7", cfg.BackupKeep)
+		}
+	})
+
+	t.Run("disable auto", func(t *testing.T) {
+		cfg := LoadConfig(fakeEnv(map[string]string{"PP_BACKUP_AUTO": "false"}))
+		if cfg.BackupAuto {
+			t.Fatal("PP_BACKUP_AUTO=false -> BackupAuto = true, want false")
+		}
+	})
+
+	for _, v := range []string{"", "nope", "0", "-1h"} {
+		cfg := LoadConfig(fakeEnv(map[string]string{"PP_BACKUP_INTERVAL": v}))
+		if cfg.BackupInterval != 24*time.Hour {
+			t.Errorf("PP_BACKUP_INTERVAL=%q -> %s, want default 24h", v, cfg.BackupInterval)
+		}
+	}
+
+	for _, v := range []string{"", "nope", "0", "-3"} {
+		cfg := LoadConfig(fakeEnv(map[string]string{"PP_BACKUP_KEEP": v}))
+		if cfg.BackupKeep != 7 {
+			t.Errorf("PP_BACKUP_KEEP=%q -> %d, want default 7", v, cfg.BackupKeep)
+		}
+	}
+}
+
+// TestConfigValidateBackup enforces interval/keep only when auto backups are
+// enabled; disabled auto-backup skips those checks.
+func TestConfigValidateBackup(t *testing.T) {
+	t.Run("enabled with valid settings", func(t *testing.T) {
+		cfg := LoadConfig(fakeEnv(nil))
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() with default backup settings = %v, want nil", err)
+		}
+	})
+
+	t.Run("enabled with short interval", func(t *testing.T) {
+		cfg := LoadConfig(fakeEnv(nil))
+		cfg.BackupInterval = 30 * time.Second
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "PP_BACKUP_INTERVAL") {
+			t.Fatalf("Validate() with short interval = %v, want an error naming PP_BACKUP_INTERVAL", err)
+		}
+	})
+
+	t.Run("enabled with keep zero", func(t *testing.T) {
+		cfg := LoadConfig(fakeEnv(nil))
+		cfg.BackupKeep = 0
+		err := cfg.Validate()
+		if err == nil || !strings.Contains(err.Error(), "PP_BACKUP_KEEP") {
+			t.Fatalf("Validate() with keep=0 = %v, want an error naming PP_BACKUP_KEEP", err)
+		}
+	})
+
+	t.Run("disabled skips interval/keep checks", func(t *testing.T) {
+		cfg := LoadConfig(fakeEnv(map[string]string{"PP_BACKUP_AUTO": "false"}))
+		cfg.BackupInterval = time.Second
+		cfg.BackupKeep = 0
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() with auto disabled = %v, want nil", err)
 		}
 	})
 }
