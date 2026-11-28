@@ -106,6 +106,18 @@ describe('Sidebar', () => {
 		expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current');
 	});
 
+	it('renders decorative Hugeicons beside each nav label without changing accessible names', () => {
+		auth.user = OWNER;
+		render(Sidebar, { pathname: '/' });
+
+		const posts = screen.getByRole('link', { name: 'Posts' });
+		expect(posts).toHaveAttribute('data-animate-icon-root');
+		const icon = posts.querySelector('[aria-hidden="true"] svg');
+		expect(icon).not.toBeNull();
+		expect(icon).toHaveAttribute('width', '16');
+		expect(icon).toHaveAttribute('height', '16');
+	});
+
 	it('shows the signed-in user block with name, role badge and Logout', () => {
 		auth.user = OWNER;
 		render(Sidebar, { pathname: '/' });

@@ -9,13 +9,19 @@
 	 * The current pathname is passed in as a prop rather than read from
 	 * $app/state here, so this component stays trivially unit-testable and the
 	 * active-route logic lives in the pure `activeKeyFromPath` helper.
+	 *
+	 * Nav item icons use Hugeicons (free stroke-rounded) with a Svelte
+	 * AnimateHugeicon wrapper that mirrors Animate UI's animateOnHover /
+	 * animateOnTap triggers without pulling React into the admin app.
 	 */
 	import { goto } from '$app/navigation';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import AnimateHugeicon from '$lib/components/icons/AnimateHugeicon.svelte';
 	import { cn } from '$lib/utils.js';
 	import { auth } from '$lib/auth.svelte';
 	import { activeKeyFromPath, NAV_GROUPS } from '$lib/nav';
+	import { NAV_ICONS, NAV_ICON_SIZE, NAV_ICON_STROKE_WIDTH } from '$lib/nav-icons';
 
 	let { pathname, onNavigate }: { pathname: string; onNavigate?: () => void } = $props();
 
@@ -58,9 +64,10 @@
 							<a
 								href={item.href}
 								onclick={onNavigate}
+								data-animate-icon-root
 								aria-current={activeKey === item.key ? 'page' : undefined}
 								class={cn(
-									'relative flex items-center py-[3px] pr-[30px] text-[13px] leading-5 no-underline transition-opacity hover:opacity-70',
+									'relative flex items-center gap-2 py-[3px] pr-[30px] text-[13px] leading-5 no-underline transition-opacity hover:opacity-70',
 									activeKey === item.key ? 'text-stone-900' : 'text-stone-800'
 								)}
 							>
@@ -70,6 +77,12 @@
 										aria-hidden="true"
 									></span>
 								{/if}
+								<AnimateHugeicon
+									icon={NAV_ICONS[item.key]}
+									size={NAV_ICON_SIZE}
+									strokeWidth={NAV_ICON_STROKE_WIDTH}
+									class="shrink-0 text-current"
+								/>
 								{item.label}
 							</a>
 						</li>
